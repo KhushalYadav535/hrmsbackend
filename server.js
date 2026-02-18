@@ -16,10 +16,23 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// CORS
+// CORS - Allow multiple origins (Vercel frontend + localhost for development)
+const allowedOrigins = process.env.CORS_ORIGIN 
+  ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
+  : ['http://localhost:3000', 'https://hrmssystem.vercel.app'];
+
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: function (origin, callback) {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.indexOf(origin) !== -1) {
+        callback(null, true);
+      } else {
+        callback(null, true); // Allow all origins for now (can restrict later)
+      }
+    },
     credentials: true,
   })
 );
