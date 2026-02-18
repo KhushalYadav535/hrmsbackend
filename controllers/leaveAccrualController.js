@@ -62,14 +62,36 @@ exports.accrueLeaves = async (req, res) => {
           const monthsSinceJoining = (accrualDate.getFullYear() - joinDate.getFullYear()) * 12 + 
                                     (accrualDate.getMonth() - joinDate.getMonth());
           
-          // If employee joined in current month, calculate pro-rata
-          let accrualDays = policy.daysPerYear / 12; // Monthly accrual
+          // Calculate accrual based on policy settings
+          let accrualDays = 0;
           
-          if (monthsSinceJoining === 0) {
-            // Pro-rata for first month
-            const daysInMonth = new Date(accrualDate.getFullYear(), accrualDate.getMonth() + 1, 0).getDate();
-            const daysWorked = daysInMonth - joinDate.getDate() + 1;
-            accrualDays = (policy.daysPerYear / 12) * (daysWorked / daysInMonth);
+          // Use accrual settings from policy if available, otherwise default to monthly
+          const accrualFrequency = policy.accrualFrequency || 'Monthly';
+          const accrualRate = policy.accrualRate || (policy.daysPerYear / 12);
+          
+          if (accrualFrequency === 'None') {
+            // No accrual for this policy
+            continue;
+          } else if (accrualFrequency === 'Monthly') {
+            accrualDays = accrualRate;
+            
+            // Pro-rata for first month if employee joined in current month
+            if (monthsSinceJoining === 0) {
+              const daysInMonth = new Date(accrualDate.getFullYear(), accrualDate.getMonth() + 1, 0).getDate();
+              const daysWorked = daysInMonth - joinDate.getDate() + 1;
+              accrualDays = accrualRate * (daysWorked / daysInMonth);
+            }
+          } else if (accrualFrequency === 'Quarterly') {
+            // Only accrue on quarter start months (Jan, Apr, Jul, Oct)
+            const quarterStartMonths = [0, 3, 6, 9]; // 0-indexed
+            if (quarterStartMonths.includes(accrualDate.getMonth())) {
+              accrualDays = accrualRate;
+            }
+          } else if (accrualFrequency === 'Yearly') {
+            // Only accrue on financial year start (April)
+            if (accrualDate.getMonth() === 3) { // April = 3 (0-indexed)
+              accrualDays = accrualRate;
+            }
           }
 
           // Find or create leave balance

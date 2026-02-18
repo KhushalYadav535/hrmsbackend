@@ -17,6 +17,25 @@ const leavePolicySchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  accrualFrequency: {
+    type: String,
+    enum: ['Monthly', 'Quarterly', 'Yearly', 'None'],
+    default: 'Monthly',
+    comment: 'How often leaves are accrued: Monthly, Quarterly, Yearly, or None',
+  },
+  accrualRate: {
+    type: Number,
+    default: 0,
+    min: 0,
+    comment: 'Number of days accrued per accrual period (e.g., 1 day per month)',
+  },
+  accrualDate: {
+    type: Number,
+    default: 1,
+    min: 1,
+    max: 31,
+    comment: 'Day of month when accrual happens (1-31, default: 1st)',
+  },
   carryForward: {
     type: Boolean,
     default: false,

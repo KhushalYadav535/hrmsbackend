@@ -230,6 +230,210 @@ exports.deleteAttendance = async (req, res) => {
   }
 };
 
+// @desc    Check In - Mark attendance for today
+// @route   POST /api/attendance/checkin
+// @access  Private
+exports.checkIn = async (req, res) => {
+  try {
+    // Find employee by user email
+    const employee = await Employee.findOne({ 
+      email: req.user.email,
+      tenantId: req.tenantId 
+    });
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employee record not found for this user',
+      });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Check if attendance already exists for today
+    let attendance = await Attendance.findOne({
+      tenantId: req.tenantId,
+      employeeId: employee._id,
+      date: today,
+    });
+
+    const checkInTime = new Date();
+
+    if (attendance) {
+      // Update existing attendance with check-in
+      if (attendance.checkIn) {
+        return res.status(400).json({
+          success: false,
+          message: 'You have already checked in today',
+        });
+      }
+      attendance.checkIn = checkInTime;
+      attendance.status = 'Present';
+      await attendance.save();
+    } else {
+      // Create new attendance record
+      attendance = await Attendance.create({
+        tenantId: req.tenantId,
+        employeeId: employee._id,
+        date: today,
+        checkIn: checkInTime,
+        status: 'Present',
+        location: req.body.location || '',
+        remarks: req.body.remarks || '',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Checked in successfully',
+      data: attendance,
+    });
+  } catch (error) {
+    console.error('Error checking in:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Check Out - Mark checkout for today
+// @route   POST /api/attendance/checkout
+// @access  Private
+exports.checkOut = async (req, res) => {
+  try {
+    // Find employee by user email
+    const employee = await Employee.findOne({ 
+      email: req.user.email,
+      tenantId: req.tenantId 
+    });
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employee record not found for this user',
+      });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Find today's attendance
+    let attendance = await Attendance.findOne({
+      tenantId: req.tenantId,
+      employeeId: employee._id,
+      date: today,
+    });
+
+    if (!attendance || !attendance.checkIn) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please check in first before checking out',
+      });
+    }
+
+    if (attendance.checkOut) {
+      return res.status(400).json({
+        success: false,
+        message: 'You have already checked out today',
+      });
+    }
+
+    const checkOutTime = new Date();
+    attendance.checkOut = checkOutTime;
+    
+    // Calculate working hours
+    const diffTime = Math.abs(checkOutTime - attendance.checkIn);
+    attendance.workingHours = Math.round((diffTime / (1000 * 60 * 60)) * 10) / 10;
+    
+    await attendance.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Checked out successfully',
+      data: attendance,
+    });
+  } catch (error) {
+    console.error('Error checking out:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+};
+
+// @desc    Get today's attendance status
+// @route   GET /api/attendance/today
+// @access  Private
+exports.getTodayAttendance = async (req, res) => {
+  try {
+    // Find employee by user email
+    const employee = await Employee.findOne({ 
+      email: req.user.email,
+      tenantId: req.tenantId 
+    });
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: 'Employee record not found for this user',
+      });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const attendance = await Attendance.findOne({
+      tenantId: req.tenantId,
+      employeeId: employee._id,
+      date: today,
+    });
+
+    if (!attendance) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          checkedIn: false,
+          checkedOut: false,
+          checkIn: null,
+          checkOut: null,
+          workingHours: 0,
+          status: null,
+        },
+      });
+    }
+
+    // Calculate working hours if checked in but not checked out
+    let workingHours = attendance.workingHours || 0;
+    if (attendance.checkIn && !attendance.checkOut) {
+      const diffTime = Math.abs(new Date() - attendance.checkIn);
+      workingHours = Math.round((diffTime / (1000 * 60 * 60)) * 10) / 10;
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        checkedIn: !!attendance.checkIn,
+        checkedOut: !!attendance.checkOut,
+        checkIn: attendance.checkIn,
+        checkOut: attendance.checkOut,
+        workingHours: workingHours,
+        status: attendance.status,
+      },
+    });
+  } catch (error) {
+    console.error('Error getting today attendance:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error',
+      error: error.message,
+    });
+  }
+};
+
 // @desc    Get attendance summary for employee
 // @route   GET /api/attendance/summary/:employeeId
 // @access  Private

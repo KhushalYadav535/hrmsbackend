@@ -157,17 +157,23 @@ async function sendNotification({ to, channels = ['email'], subject, message, ht
 
   // Log notification in audit log
   try {
-    await AuditLog.create({
-      tenantId,
-      userId,
-      userName: 'System',
-      userEmail: 'system@hrms.com',
-      action: 'Notification Sent',
-      module: module || 'Notifications',
-      entityType: 'Notification',
-      details: `Notification sent via ${channels.join(', ')} to ${to}`,
-      status: 'Success',
-    });
+    // Create audit log only if action is valid
+    try {
+      await AuditLog.create({
+        tenantId,
+        userId,
+        userName: 'System',
+        userEmail: 'system@hrms.com',
+        action: 'Notification Sent',
+        module: module || 'Notifications',
+        entityType: 'Notification',
+        details: `Notification sent via ${channels.join(', ')} to ${to}`,
+        status: 'Success',
+      });
+    } catch (auditError) {
+      // Silently fail audit log creation - don't break notification flow
+      console.error('Audit log error (non-critical):', auditError.message);
+    }
   } catch (auditError) {
     console.error('Audit log error:', auditError);
   }

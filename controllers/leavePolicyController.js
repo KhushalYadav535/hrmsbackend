@@ -10,7 +10,14 @@ exports.getLeavePolicies = async (req, res) => {
 
     if (status) filter.status = status;
 
+    // Ensure only policies for current tenant are returned
     const policies = await LeavePolicy.find(filter).sort({ leaveType: 1 });
+
+    // Log for debugging - ensure tenant filtering is working
+    console.log(`[getLeavePolicies] Tenant ID: ${req.tenantId}, Status filter: ${status || 'all'}, Found ${policies.length} policies`);
+    if (policies.length > 0) {
+      console.log(`[getLeavePolicies] Policies:`, policies.map(p => p.leaveType).join(', '));
+    }
 
     res.status(200).json({
       success: true,

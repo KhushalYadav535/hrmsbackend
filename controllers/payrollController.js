@@ -175,11 +175,19 @@ const calculateLOPDays = async (employeeId, tenantId, month, year) => {
     });
 
     // Get unpaid leave days (LOP leaves)
+    // Convert to ObjectId if they're strings, otherwise use as-is
+    const tenantObjectId = mongoose.Types.ObjectId.isValid(tenantId) 
+      ? (tenantId instanceof mongoose.Types.ObjectId ? tenantId : new mongoose.Types.ObjectId(tenantId))
+      : tenantId;
+    const employeeObjectId = mongoose.Types.ObjectId.isValid(employeeId)
+      ? (employeeId instanceof mongoose.Types.ObjectId ? employeeId : new mongoose.Types.ObjectId(employeeId))
+      : employeeId;
+    
     const unpaidLeaves = await LeaveRequest.aggregate([
       {
         $match: {
-          tenantId: new mongoose.Types.ObjectId(tenantId),
-          employeeId: new mongoose.Types.ObjectId(employeeId),
+          tenantId: tenantObjectId,
+          employeeId: employeeObjectId,
           leaveType: { $in: ['LOP', 'Loss of Pay', 'Unpaid Leave'] },
           status: 'Approved',
           startDate: { $lte: endDate },
@@ -408,14 +416,7 @@ exports.createPayroll = async (req, res) => {
     req.body.status = req.body.status || 'Draft';
     req.body.makerId = req.user._id;
     req.body.makerName = req.user.name || req.user.email;
-    req.body.approvalHistory = [{
-      action: 'Draft',
-      userId: req.user._id,
-      userName: req.user.name || req.user.email,
-      userRole: req.user.role,
-      comments: 'Payroll created',
-      timestamp: new Date(),
-    }];
+    // Note: approvalHistory is not set for Draft status - it will be added when payroll is Submitted
 
     const payroll = await Payroll.create(req.body);
 
@@ -489,11 +490,33 @@ exports.processPayroll = async (req, res) => {
           continue;
         }
 
+        // Validate employee has salary
+        if (!employee.salary || employee.salary <= 0) {
+          errors.push({
+            employeeCode: employee.employeeCode,
+            employeeName: `${employee.firstName} ${employee.lastName}`,
+            error: 'Employee salary is not set or is 0. Please assign salary to employee.',
+          });
+          console.warn(`[processPayroll] Employee ${employee.employeeCode} (${employee.firstName} ${employee.lastName}) has no salary or salary is 0`);
+          continue;
+        }
+
         // Calculate salary components
-        const basicSalary = employee.salary * 0.4; // Assuming 40% of CTC is Basic
+        // Use employee.salary (CTC) or employee.ctc if available
+        const ctc = employee.salary || employee.ctc || 0;
+        if (ctc <= 0) {
+          errors.push({
+            employeeCode: employee.employeeCode,
+            employeeName: `${employee.firstName} ${employee.lastName}`,
+            error: 'Employee CTC is not set or is 0. Please assign salary/CTC to employee.',
+          });
+          continue;
+        }
+
+        const basicSalary = ctc * 0.4; // Assuming 40% of CTC is Basic
         const da = calculateDA(basicSalary);
         const hra = calculateHRA(basicSalary, employee.location || '');
-        const allowances = (employee.salary * 0.15) || 0; // 15% allowances
+        const allowances = (ctc * 0.15) || 0; // 15% allowances
         const grossSalary = basicSalary + da + hra + allowances;
 
         // Calculate deductions
@@ -504,14 +527,28 @@ exports.processPayroll = async (req, res) => {
         const incomeTax = calculateIncomeTax(annualSalary);
         
         // BRD Requirement: Loan deductions integration
-        const loanData = await getLoanDeductions(employee._id, req.tenantId);
-        const loanDeductions = loanData.totalDeduction || 0;
+        let loanDeductions = 0;
+        try {
+          const loanData = await getLoanDeductions(employee._id, req.tenantId);
+          loanDeductions = loanData?.totalDeduction || 0;
+        } catch (loanError) {
+          console.error(`[processPayroll] Error getting loan deductions for ${employee.employeeCode}:`, loanError);
+          loanDeductions = 0; // Continue with 0 loan deductions if error
+        }
         
         // BRD Requirement: LOP calculation from attendance and leave
-        const lopData = await calculateLOPDays(employee._id, req.tenantId, month, year);
-        const lopDays = lopData.lopDays;
-        const dailyRate = grossSalary / 30; // Simplified daily rate
-        const lopDeduction = Math.round(lopDays * dailyRate);
+        let lopDays = 0;
+        let lopDeduction = 0;
+        try {
+          const lopData = await calculateLOPDays(employee._id, req.tenantId, month, year);
+          lopDays = lopData?.lopDays || 0;
+          const dailyRate = grossSalary / 30; // Simplified daily rate
+          lopDeduction = Math.round(lopDays * dailyRate);
+        } catch (lopError) {
+          console.error(`[processPayroll] Error calculating LOP for ${employee.employeeCode}:`, lopError);
+          lopDays = 0;
+          lopDeduction = 0; // Continue with 0 LOP if error
+        }
         
         // Total deductions including LOP and loans
         const totalDeductions = epfData.employee + esiData.employee + incomeTax + professionalTax + lopDeduction + loanDeductions;
@@ -533,7 +570,7 @@ exports.processPayroll = async (req, res) => {
         summaryByDesignation[designation].totalNet += netSalary;
 
         // Create payroll record
-        const payroll = await Payroll.create({
+        const payroll = new Payroll({
           tenantId: req.tenantId,
           employeeId: employee._id,
           month,
@@ -558,15 +595,15 @@ exports.processPayroll = async (req, res) => {
           makerId: req.user._id,
           makerName: req.user.name || req.user.email,
           employeeDesignation: designation, // Store for grouping
-          approvalHistory: [{
-            action: 'Draft',
-            userId: req.user._id,
-            userName: req.user.name || req.user.email,
-            userRole: req.user.role,
-            comments: 'Payroll processed',
-            timestamp: new Date(),
-          }],
+          // Note: approvalHistory is not set for Draft status - it will be added when payroll is Submitted
         });
+        
+        await payroll.save();
+
+        // Debug: Log first payroll record to verify fields
+        if (processedPayrolls.length === 0) {
+          console.log(`[processPayroll] First payroll record: Basic=${basicSalary}, DA=${da}, HRA=${hra}, Allowances=${allowances}, Gross=${grossSalary}, Net=${netSalary}`);
+        }
 
         processedPayrolls.push({
           employeeId: employee._id,
@@ -578,10 +615,11 @@ exports.processPayroll = async (req, res) => {
         });
 
       } catch (error) {
+        console.error(`[processPayroll] Error processing payroll for ${employee.employeeCode}:`, error);
         errors.push({
           employeeCode: employee.employeeCode,
           employeeName: `${employee.firstName} ${employee.lastName}`,
-          error: error.message,
+          error: error.message || 'Unknown error occurred',
         });
       }
     }
@@ -612,11 +650,18 @@ exports.processPayroll = async (req, res) => {
       }
     });
 
+    // Log summary for debugging
+    console.log(`[processPayroll] Summary: ${processedPayrolls.length} processed, ${errors.length} errors, ${employees.length} total employees`);
+    if (errors.length > 0) {
+      console.log(`[processPayroll] Errors:`, errors.slice(0, 5)); // Log first 5 errors
+    }
+
     res.status(200).json({
       success: true,
-      message: `Processed ${processedPayrolls.length} payroll records`,
+      message: `Processed ${processedPayrolls.length} payroll records${errors.length > 0 ? ` (${errors.length} skipped due to errors)` : ''}`,
       processed: processedPayrolls.length,
       errors: errors.length,
+      totalEmployees: employees.length,
       data: {
         processedPayrolls,
         errors: errors.length > 0 ? errors : undefined,
@@ -691,9 +736,29 @@ exports.getPayrollStats = async (req, res) => {
 
     // Overall stats
     const totalEmployees = payrolls.length;
-    const totalGross = payrolls.reduce((sum, p) => sum + (p.grossSalary || 0), 0);
-    const totalDeductions = payrolls.reduce((sum, p) => sum + (p.pfDeduction || 0) + (p.esiDeduction || 0) + (p.incomeTax || 0) + (p.otherDeductions || 0), 0);
+    const totalBasic = payrolls.reduce((sum, p) => sum + (p.basicSalary || 0), 0);
+    const totalDA = payrolls.reduce((sum, p) => sum + (p.da || 0), 0);
+    const totalHRA = payrolls.reduce((sum, p) => sum + (p.hra || 0), 0);
+    const totalAllowances = payrolls.reduce((sum, p) => sum + (p.allowances || 0), 0);
+    // Calculate totalGross - use grossSalary field if available, otherwise calculate from components
+    const totalGross = payrolls.reduce((sum, p) => {
+      const gross = p.grossSalary || 0;
+      // If grossSalary is 0 or missing, calculate from components
+      if (gross === 0 && (p.basicSalary || p.da || p.hra || p.allowances)) {
+        return sum + ((p.basicSalary || 0) + (p.da || 0) + (p.hra || 0) + (p.allowances || 0));
+      }
+      return sum + gross;
+    }, 0);
+    
+    const totalDeductions = payrolls.reduce((sum, p) => sum + (p.pfDeduction || 0) + (p.esiDeduction || 0) + (p.incomeTax || 0) + (p.otherDeductions || 0) + (p.lopDeduction || 0) + (p.loanDeductions || 0), 0);
     const totalNet = payrolls.reduce((sum, p) => sum + (p.netSalary || 0), 0);
+
+    // Debug logging
+    console.log(`[getPayrollStats] Calculated totals: Basic=${totalBasic}, DA=${totalDA}, HRA=${totalHRA}, Allowances=${totalAllowances}, Gross=${totalGross}, Deductions=${totalDeductions}, Net=${totalNet}`);
+    if (payrolls.length > 0) {
+      const sample = payrolls[0];
+      console.log(`[getPayrollStats] Sample payroll: Basic=${sample.basicSalary}, DA=${sample.da}, HRA=${sample.hra}, Allowances=${sample.allowances}, GrossSalary=${sample.grossSalary}, CalculatedGross=${(sample.basicSalary || 0) + (sample.da || 0) + (sample.hra || 0) + (sample.allowances || 0)}`);
+    }
 
     // Status breakdown
     const statusBreakdown = {
@@ -709,11 +774,27 @@ exports.getPayrollStats = async (req, res) => {
       success: true,
       data: {
         totalEmployees,
+        // Individual earnings totals
+        totalBasic,
+        totalBasicSalary: totalBasic, // Alias for frontend compatibility
+        totalDA,
+        totalHRA,
+        totalAllowances,
+        // Gross and Net
         totalGross,
+        totalGrossSalary: totalGross, // Alias for frontend compatibility
         totalDeductions,
         totalNet,
+        totalNetSalary: totalNet, // Alias for frontend compatibility
+        totalNetPayroll: totalNet, // Alias for frontend compatibility
         statusBreakdown,
+        byDesignation: statsByDesignation, // Alias for frontend compatibility
         statsByDesignation,
+        // Individual deduction totals for charts
+        totalEPF: payrolls.reduce((sum, p) => sum + (p.pfDeduction || 0), 0),
+        totalESI: payrolls.reduce((sum, p) => sum + (p.esiDeduction || 0), 0),
+        totalIncomeTax: payrolls.reduce((sum, p) => sum + (p.incomeTax || 0), 0),
+        totalOtherDeductions: payrolls.reduce((sum, p) => sum + (p.otherDeductions || 0) + (p.lopDeduction || 0) + (p.loanDeductions || 0), 0),
       },
     });
   } catch (error) {
@@ -834,15 +915,32 @@ exports.approvePayroll = async (req, res) => {
     }
 
     // BRD Requirement: Maker-checker - checker must be different from maker
-    if (payroll.status === 'Submitted' && payroll.makerId && payroll.makerId.toString() === req.user._id.toString()) {
+    // Checker can approve Draft payrolls created by different Maker OR Submitted payrolls
+    const isMaker = payroll.makerId && payroll.makerId.toString() === req.user._id.toString();
+    
+    if ((payroll.status === 'Draft' || payroll.status === 'Submitted') && isMaker) {
       return res.status(400).json({
         success: false,
         message: 'Maker cannot approve their own payroll. Another Payroll Administrator must approve.',
       });
     }
 
-    if (payroll.status === 'Submitted') {
-      // First approval by checker (Payroll Admin)
+    if (payroll.status === 'Draft' && payroll.makerId) {
+      // Checker can approve Draft payrolls created by different Maker
+      payroll.status = 'Approved';
+      payroll.approvedDate = new Date();
+      payroll.checkerId = req.user._id;
+      payroll.checkerName = req.user.name || req.user.email;
+      payroll.approvalHistory.push({
+        action: 'Approved',
+        userId: req.user._id,
+        userName: req.user.name || req.user.email,
+        userRole: req.user.role,
+        comments: req.body.comments || 'Approved by checker (Draft)',
+        timestamp: new Date(),
+      });
+    } else if (payroll.status === 'Submitted') {
+      // First approval by checker (Payroll Admin) for Submitted payrolls
       payroll.status = 'Approved';
       payroll.approvedDate = new Date();
       payroll.checkerId = req.user._id;

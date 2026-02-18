@@ -7,12 +7,20 @@ const {
   updateAttendance,
   deleteAttendance,
   getAttendanceSummary,
+  checkIn,
+  checkOut,
+  getTodayAttendance,
 } = require('../controllers/attendanceController');
 const { protect, authorize } = require('../middleware/auth');
 const { setTenant } = require('../middleware/tenant');
 
 router.use(protect);
 router.use(setTenant);
+
+// Check-in/Check-out routes (available to all authenticated users)
+router.post('/checkin', checkIn);
+router.post('/checkout', checkOut);
+router.get('/today', getTodayAttendance);
 
 router.get('/summary/:employeeId', getAttendanceSummary);
 

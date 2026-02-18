@@ -57,8 +57,8 @@ exports.getLeaves = async (req, res) => {
     console.log('getLeaves - Tenant ID:', req.tenantId);
 
     const leaves = await LeaveRequest.find(filter)
-      .populate('employeeId', 'firstName lastName employeeCode')
-      .populate('approverId', 'name email')
+      .populate('employeeId', 'firstName lastName employeeCode email')
+      .populate('approverId', 'name email role')
       .sort({ appliedDate: -1 });
 
     console.log('getLeaves - Found leaves:', leaves.length);
@@ -90,7 +90,7 @@ exports.getLeave = async (req, res) => {
       tenantId: req.tenantId,
     })
       .populate('employeeId', 'firstName lastName employeeCode email')
-      .populate('approverId', 'name email');
+      .populate('approverId', 'name email role');
 
     if (!leave) {
       return res.status(404).json({
@@ -133,20 +133,134 @@ exports.getLeaveBalance = async (req, res) => {
       });
     }
 
-    // Get all active leave policies for tenant
+    // Get all active leave policies for tenant ONLY
     const leavePolicies = await LeavePolicy.find({
       tenantId: tenantId,
       status: 'Active',
     });
 
-    // Calculate balance for each leave type
-    const currentYear = new Date().getFullYear();
-    const yearStart = new Date(currentYear, 0, 1);
-    const yearEnd = new Date(currentYear, 11, 31);
+    // Log for debugging - ensure only tenant's policies are returned
+    console.log(`[getLeaveBalance] Tenant ID: ${tenantId}, Found ${leavePolicies.length} active leave policies for this tenant`);
+    if (leavePolicies.length > 0) {
+      console.log(`[getLeaveBalance] Policies:`, leavePolicies.map(p => p.leaveType).join(', '));
+    }
 
+    // Calculate financial year
+    const currentDate = new Date();
+    const currentYear = currentDate.getFullYear();
+    const financialYear = currentDate.getMonth() >= 3 ? currentYear : currentYear - 1; // FY starts April
+
+    // Get leave balances from LeaveBalance model (if accrual has been run)
+    const LeaveBalance = require('../models/LeaveBalance');
+    const existingBalances = await LeaveBalance.find({
+      tenantId: tenantId,
+      employeeId: employeeId,
+      financialYear: financialYear,
+    });
+
+    // Calculate balance for each leave type based on accrual settings
     const balances = await Promise.all(
       leavePolicies.map(async (policy) => {
-        // Count approved leaves of this type for this employee in current year
+        // Find existing balance record
+        let leaveBalance = existingBalances.find(b => b.leaveType === policy.leaveType);
+
+        // Initialize variables (will be used regardless of whether balance exists)
+        let accruedDays = 0;
+        let availableDays = 0;
+        const accrualFrequency = policy.accrualFrequency || 'Monthly';
+        const accrualRate = policy.accrualRate || (policy.daysPerYear / 12);
+        const accrualDate = policy.accrualDate || 1; // Day of month when accrual happens
+
+        if (!leaveBalance) {
+          // Calculate accrued balance based on accrual frequency and employee joining date
+          const joinDate = new Date(employee.joinDate);
+          const currentDate = new Date();
+          
+          // Calculate financial year start (April 1st)
+          const fyStart = new Date(financialYear, 3, 1); // April 1st
+          const effectiveStartDate = joinDate > fyStart ? joinDate : fyStart;
+
+          if (accrualFrequency === 'Monthly') {
+            // Count number of accrual periods (months) where accrual date has passed
+            let accrualPeriods = 0;
+            
+            // Start from effective start date (FY start or join date, whichever is later)
+            let checkDate = new Date(effectiveStartDate);
+            
+            // Find the first accrual date after effective start
+            // If join date is after accrual date in that month, start from next month
+            if (checkDate.getDate() > accrualDate) {
+              checkDate.setMonth(checkDate.getMonth() + 1);
+            }
+            checkDate.setDate(accrualDate);
+            checkDate.setHours(0, 0, 0, 0);
+            
+            // Count accrual periods until current date
+            const currentDateOnly = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+            while (checkDate <= currentDateOnly) {
+              accrualPeriods++;
+              // Move to next month's accrual date
+              checkDate.setMonth(checkDate.getMonth() + 1);
+              checkDate.setDate(accrualDate);
+            }
+            
+            // Calculate accrued days
+            accruedDays = accrualRate * accrualPeriods;
+            
+            // Pro-rata for first accrual if employee joined after accrual date in that month
+            const firstAccrualDate = new Date(effectiveStartDate.getFullYear(), effectiveStartDate.getMonth(), accrualDate);
+            if (effectiveStartDate > firstAccrualDate && accrualPeriods > 0) {
+              // Employee joined after accrual date, so first accrual should be pro-rata
+              const daysInMonth = new Date(effectiveStartDate.getFullYear(), effectiveStartDate.getMonth() + 1, 0).getDate();
+              const daysWorked = daysInMonth - effectiveStartDate.getDate() + 1;
+              const proRataDays = accrualRate * (daysWorked / daysInMonth);
+              // Replace first accrual with pro-rata
+              accruedDays = accruedDays - accrualRate + proRataDays;
+            }
+            
+            console.log(`[getLeaveBalance] Monthly accrual for ${policy.leaveType}: ${accrualPeriods} periods × ${accrualRate} = ${accruedDays} days (Employee joined: ${employee.joinDate.toISOString().split('T')[0]}, Effective start: ${effectiveStartDate.toISOString().split('T')[0]})`);
+          } else if (accrualFrequency === 'Quarterly') {
+            // Calculate quarters since FY start
+            const monthsSinceFYStart = (currentDate.getFullYear() - fyStart.getFullYear()) * 12 + 
+                                      (currentDate.getMonth() - fyStart.getMonth());
+            const quartersSinceFYStart = Math.floor(Math.max(0, monthsSinceFYStart) / 3);
+            
+            // Check if current quarter's accrual has happened
+            const quarterStartMonths = [0, 3, 6, 9]; // Jan, Apr, Jul, Oct
+            const currentQuarterStart = new Date(currentDate.getFullYear(), Math.floor(currentDate.getMonth() / 3) * 3, accrualDate);
+            if (currentDate >= currentQuarterStart && fyStart <= currentQuarterStart) {
+              accruedDays = accrualRate * (quartersSinceFYStart + 1);
+            } else {
+              accruedDays = accrualRate * quartersSinceFYStart;
+            }
+          } else if (accrualFrequency === 'Yearly') {
+            // Only if FY has started and accrual date has passed
+            const fyAccrualDate = new Date(financialYear, 3, accrualDate); // April 1st (or accrualDate)
+            if (currentDate >= fyAccrualDate) {
+              accruedDays = accrualRate;
+            }
+          } else if (accrualFrequency === 'None') {
+            // No accrual - show full entitlement at once
+            accruedDays = policy.daysPerYear;
+          }
+
+          // Round to 1 decimal place
+          accruedDays = Math.round(accruedDays * 10) / 10;
+          
+          // Ensure accrued days don't exceed daysPerYear
+          accruedDays = Math.min(accruedDays, policy.daysPerYear);
+          
+          console.log(`[getLeaveBalance] Calculated accrued balance for ${policy.leaveType}: ${accruedDays} days (Frequency: ${accrualFrequency}, Rate: ${accrualRate}/period, DaysPerYear: ${policy.daysPerYear}, Employee joined: ${employee.joinDate.toISOString().split('T')[0]})`);
+        } else {
+          // Use existing balance record (from accrual process)
+          accruedDays = leaveBalance.accrued || 0;
+          console.log(`[getLeaveBalance] Using existing balance record for ${policy.leaveType}: ${accruedDays} days (from LeaveBalance model)`);
+        }
+
+        // Count approved leaves of this type for this employee in current financial year
+        const fyStart = new Date(financialYear, 3, 1); // April 1st
+        const fyEnd = new Date(financialYear + 1, 2, 31); // March 31st
+        
         const approvedLeaves = await LeaveRequest.aggregate([
           {
             $match: {
@@ -154,7 +268,7 @@ exports.getLeaveBalance = async (req, res) => {
               employeeId: new mongoose.Types.ObjectId(employeeId),
               leaveType: policy.leaveType,
               status: 'Approved',
-              startDate: { $gte: yearStart, $lte: yearEnd },
+              startDate: { $gte: fyStart, $lte: fyEnd },
             },
           },
           {
@@ -166,15 +280,25 @@ exports.getLeaveBalance = async (req, res) => {
         ]);
 
         const usedDays = approvedLeaves.length > 0 ? approvedLeaves[0].totalDays : 0;
-        const availableDays = Math.max(0, policy.daysPerYear - usedDays);
+        const openingBalance = leaveBalance ? (leaveBalance.openingBalance || 0) : 0;
+        const totalAccrued = openingBalance + accruedDays;
+        availableDays = Math.max(0, totalAccrued - usedDays);
+
+        // Apply max balance limit if configured
+        if (policy.maxCarryForward && policy.maxCarryForward > 0) {
+          availableDays = Math.min(availableDays, policy.maxCarryForward);
+        }
 
         return {
           leaveType: policy.leaveType,
           daysPerYear: policy.daysPerYear,
+          accrued: accruedDays,
           used: usedDays,
-          available: availableDays,
+          available: Math.round(availableDays * 10) / 10, // Round to 1 decimal
           carryForward: policy.carryForward,
           maxCarryForward: policy.maxCarryForward || 0,
+          accrualFrequency: policy.accrualFrequency,
+          accrualRate: policy.accrualRate,
         };
       })
     );
@@ -207,6 +331,9 @@ exports.createLeave = async (req, res) => {
         message: 'Missing required fields: leaveType, startDate, endDate, and reason are required',
       });
     }
+
+    // Normalize leave type (trim whitespace) - needed early for validation
+    const normalizedLeaveType = leaveType.trim();
 
     // Find employee by user email
     const employee = await Employee.findOne({ 
@@ -300,8 +427,7 @@ exports.createLeave = async (req, res) => {
       };
     }
 
-    // Check if leave type exists in leave policies (trim and normalize)
-    const normalizedLeaveType = leaveType.trim();
+    // Check if leave type exists in leave policies
     let leavePolicy = await LeavePolicy.findOne({
       tenantId: req.tenantId,
       leaveType: normalizedLeaveType,
@@ -327,33 +453,135 @@ exports.createLeave = async (req, res) => {
       leavePolicy = caseInsensitivePolicy;
     }
 
-    // Check leave balance (use leavePolicy.leaveType for consistency)
-    const balanceResponse = await LeaveRequest.aggregate([
-      {
-        $match: {
-          tenantId: new mongoose.Types.ObjectId(req.tenantId),
-          employeeId: new mongoose.Types.ObjectId(employee._id),
-          leaveType: leavePolicy.leaveType, // Use exact leave type from policy
-          status: 'Approved',
-          startDate: { $gte: new Date(new Date().getFullYear(), 0, 1) },
-        },
-      },
-      {
-        $group: {
-          _id: null,
-          totalDays: { $sum: '$days' },
-        },
-      },
-    ]);
-
-    const usedDays = balanceResponse.length > 0 ? balanceResponse[0].totalDays : 0;
-    const availableDays = leavePolicy.daysPerYear - usedDays;
-
-    if (diffDays > availableDays) {
-      return res.status(400).json({
-        success: false,
-        message: `Insufficient leave balance. Available: ${availableDays} days, Requested: ${diffDays} days`,
+    // Check leave balance - calculate based on accrual settings
+    // Skip balance check for Leave Without Pay (LWP) as it has unlimited balance
+    if (!normalizedLeaveType.toLowerCase().includes('without pay') && 
+        !normalizedLeaveType.toLowerCase().includes('lwp')) {
+      
+      // Calculate financial year
+      const currentDate = new Date();
+      const currentYear = currentDate.getFullYear();
+      const financialYear = currentDate.getMonth() >= 3 ? currentYear : currentYear - 1; // FY starts April
+      
+      // Get leave balance from LeaveBalance model (if accrual has been run)
+      const LeaveBalance = require('../models/LeaveBalance');
+      const leaveBalance = await LeaveBalance.findOne({
+        tenantId: req.tenantId,
+        employeeId: employee._id,
+        leaveType: leavePolicy.leaveType,
+        financialYear: financialYear,
       });
+
+      let accruedDays = 0;
+      let availableDays = 0;
+
+      if (!leaveBalance) {
+        // Calculate accrued balance based on accrual settings (same logic as getLeaveBalance)
+        const joinDate = new Date(employee.joinDate);
+        const fyStart = new Date(financialYear, 3, 1); // April 1st
+        const effectiveStartDate = joinDate > fyStart ? joinDate : fyStart;
+        
+        const accrualFrequency = leavePolicy.accrualFrequency || 'Monthly';
+        const accrualRate = leavePolicy.accrualRate || (leavePolicy.daysPerYear / 12);
+        const accrualDate = leavePolicy.accrualDate || 1;
+
+        if (accrualFrequency === 'Monthly') {
+          let accrualPeriods = 0;
+          let checkDate = new Date(effectiveStartDate);
+          
+          if (checkDate.getDate() > accrualDate) {
+            checkDate.setMonth(checkDate.getMonth() + 1);
+          }
+          checkDate.setDate(accrualDate);
+          checkDate.setHours(0, 0, 0, 0);
+          
+          const currentDateOnly = new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate());
+          while (checkDate <= currentDateOnly) {
+            accrualPeriods++;
+            checkDate.setMonth(checkDate.getMonth() + 1);
+            checkDate.setDate(accrualDate);
+          }
+          
+          accruedDays = accrualRate * accrualPeriods;
+          
+          const firstAccrualDate = new Date(effectiveStartDate.getFullYear(), effectiveStartDate.getMonth(), accrualDate);
+          if (effectiveStartDate > firstAccrualDate && accrualPeriods > 0) {
+            const daysInMonth = new Date(effectiveStartDate.getFullYear(), effectiveStartDate.getMonth() + 1, 0).getDate();
+            const daysWorked = daysInMonth - effectiveStartDate.getDate() + 1;
+            const proRataDays = accrualRate * (daysWorked / daysInMonth);
+            accruedDays = accruedDays - accrualRate + proRataDays;
+          }
+        } else if (accrualFrequency === 'Quarterly') {
+          const monthsSinceFYStart = (currentDate.getFullYear() - fyStart.getFullYear()) * 12 + 
+                                    (currentDate.getMonth() - fyStart.getMonth());
+          const quartersSinceFYStart = Math.floor(Math.max(0, monthsSinceFYStart) / 3);
+          const currentQuarterStart = new Date(currentDate.getFullYear(), Math.floor(currentDate.getMonth() / 3) * 3, accrualDate);
+          if (currentDate >= currentQuarterStart && fyStart <= currentQuarterStart) {
+            accruedDays = accrualRate * (quartersSinceFYStart + 1);
+          } else {
+            accruedDays = accrualRate * quartersSinceFYStart;
+          }
+        } else if (accrualFrequency === 'Yearly') {
+          const fyAccrualDate = new Date(financialYear, 3, accrualDate);
+          if (currentDate >= fyAccrualDate) {
+            accruedDays = accrualRate;
+          }
+        } else if (accrualFrequency === 'None') {
+          accruedDays = leavePolicy.daysPerYear;
+        }
+
+        accruedDays = Math.round(accruedDays * 10) / 10;
+        accruedDays = Math.min(accruedDays, leavePolicy.daysPerYear);
+      } else {
+        accruedDays = leaveBalance.accrued || 0;
+      }
+
+      // Count approved leaves in current financial year
+      const fyStart = new Date(financialYear, 3, 1);
+      const fyEnd = new Date(financialYear + 1, 2, 31);
+      
+      const approvedLeaves = await LeaveRequest.aggregate([
+        {
+          $match: {
+            tenantId: new mongoose.Types.ObjectId(req.tenantId),
+            employeeId: new mongoose.Types.ObjectId(employee._id),
+            leaveType: leavePolicy.leaveType,
+            status: 'Approved',
+            startDate: { $gte: fyStart, $lte: fyEnd },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalDays: { $sum: '$days' },
+          },
+        },
+      ]);
+
+      const usedDays = approvedLeaves.length > 0 ? approvedLeaves[0].totalDays : 0;
+      const openingBalance = leaveBalance ? (leaveBalance.openingBalance || 0) : 0;
+      const totalAccrued = openingBalance + accruedDays;
+      availableDays = Math.max(0, totalAccrued - usedDays);
+
+      // Apply max balance limit if configured
+      if (leavePolicy.maxCarryForward && leavePolicy.maxCarryForward > 0) {
+        availableDays = Math.min(availableDays, leavePolicy.maxCarryForward);
+      }
+
+      // Check if balance is 0 or insufficient
+      if (availableDays <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Leave balance is 0. You cannot apply for ${normalizedLeaveType}. Please check your leave balance or contact HR.`,
+        });
+      }
+
+      if (diffDays > availableDays) {
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient leave balance. Available: ${Math.round(availableDays * 10) / 10} days, Requested: ${diffDays} days`,
+        });
+      }
     }
 
     // Create leave request
@@ -529,6 +757,41 @@ exports.approveLeave = async (req, res) => {
         success: false,
         message: 'Leave request has already been processed',
       });
+    }
+
+    // BRD Requirement: Prevent self-approval
+    // HR Administrator cannot approve their own leave - must be approved by Tenant Admin
+    // Manager cannot approve their own leave
+    // Check if approver is trying to approve their own leave
+    const employee = await Employee.findById(leave.employeeId._id || leave.employeeId);
+    
+    if (employee && employee.email === req.user.email) {
+      // Prevent self-approval for all roles
+      return res.status(403).json({
+        success: false,
+        message: 'You cannot approve your own leave request.',
+      });
+    }
+
+    // BRD Requirement: HR Admin's leave must be approved by Tenant Admin only
+    // If the leave belongs to an HR Administrator, only Tenant Admin can approve
+    if (employee) {
+      // Find the user associated with this employee
+      const User = require('../models/User');
+      const employeeUser = await User.findOne({ 
+        email: employee.email,
+        tenantId: req.tenantId 
+      });
+      
+      if (employeeUser && employeeUser.role === 'HR Administrator') {
+        // Only Tenant Admin or Super Admin can approve HR Admin's leave
+        if (req.user.role !== 'Tenant Admin' && req.user.role !== 'Super Admin') {
+          return res.status(403).json({
+            success: false,
+            message: 'HR Administrator leave requests must be approved by Tenant Admin.',
+          });
+        }
+      }
     }
 
     const previousStatus = leave.status;

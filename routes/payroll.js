@@ -45,7 +45,7 @@ router.use(setTenant);
 router
   .route('/')
   .get(getPayrolls)
-  .post(authorize('Payroll Administrator', 'HR Administrator', 'Tenant Admin'), createPayroll);
+  .post(authorize('Payroll Administrator', 'Tenant Admin'), createPayroll);
 
 router
   .route('/stats')
@@ -58,7 +58,7 @@ router
 router
   .route('/:id')
   .get(getPayroll)
-  .put(authorize('Payroll Administrator', 'HR Administrator', 'Tenant Admin'), updatePayroll)
+  .put(authorize('Payroll Administrator', 'Tenant Admin'), updatePayroll)
   .delete(authorize('Payroll Administrator'), deletePayroll);
 
 // Approval workflow routes
@@ -124,11 +124,11 @@ router
 // CBS (Core Banking System) routes
 router
   .route('/cbs/validate-account')
-  .post(authorize('Payroll Administrator', 'HR Administrator', 'Finance Administrator', 'Super Admin'), validateAccount);
+  .post(authorize('Payroll Administrator', 'Finance Administrator', 'Super Admin'), validateAccount);
 
 router
   .route('/cbs/account-details')
-  .get(authorize('Payroll Administrator', 'HR Administrator', 'Finance Administrator', 'Super Admin'), getAccountDetails);
+  .get(authorize('Payroll Administrator', 'Finance Administrator', 'Super Admin'), getAccountDetails);
 
 router
   .route('/cbs/transaction-status')

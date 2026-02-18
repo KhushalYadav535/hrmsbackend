@@ -38,6 +38,11 @@ const payrollSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  grossSalary: {
+    type: Number,
+    default: 0,
+    comment: 'Gross Salary = Basic + DA + HRA + Allowances',
+  },
   pfDeduction: {
     type: Number,
     default: 0,
@@ -174,9 +179,18 @@ payrollSchema.index({ tenantId: 1, makerId: 1, status: 1 });
 payrollSchema.index({ tenantId: 1, checkerId: 1, status: 1 });
 payrollSchema.index({ tenantId: 1, financeApproverId: 1, status: 1 });
 
+// Update updatedAt before save
 payrollSchema.pre('save', function (next) {
-  this.updatedAt = Date.now();
-  next();
+  try {
+    this.updatedAt = Date.now();
+    if (next && typeof next === 'function') {
+      next();
+    }
+  } catch (error) {
+    if (next && typeof next === 'function') {
+      next(error);
+    }
+  }
 });
 
 module.exports = mongoose.model('Payroll', payrollSchema);
