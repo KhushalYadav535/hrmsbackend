@@ -4,15 +4,15 @@ const connectDB = async () => {
   try {
     // VPS MongoDB connection string
     // VPS IP: 213.210.37.237
-    // External Port: 32770 (maps to internal port 27017)
-    // Note: Docker MongoDB containers often run without authentication by default
+    // External Port: 32768 (maps to internal port 27017)
+    // Note: Check actual port with: docker ps | grep mongodb-4-o5bk-mongodb4-1
     
     // VPS MongoDB requires authentication for operations
     // First try with authentication (after running setup-mongo-user script)
-    const defaultURI = 'mongodb://admin:vJUm4yLOD8eUZsBqtdGJYU47JsJFe8rO@213.210.37.237:32770/hrms?authSource=admin';
+    const defaultURI = 'mongodb://admin:vJUm4yLOD8eUZsBqtdGJYU47JsJFe8rO@213.210.37.237:32768/hrms?authSource=admin';
     
     // If authentication fails, try without auth (for initial setup):
-    // const defaultURI = 'mongodb://213.210.37.237:32770/hrms';
+    // const defaultURI = 'mongodb://213.210.37.237:32768/hrms';
     
     // Use environment variable if set, otherwise use default
     const mongoURI = process.env.VPS_MONGODB_URI || 
@@ -22,7 +22,14 @@ const connectDB = async () => {
     console.log(`Connecting to MongoDB: ${mongoURI.replace(/:[^:@]+@/, ':****@')}`);
     
     const conn = await mongoose.connect(mongoURI, {
-      serverSelectionTimeoutMS: 10000, // 10 seconds timeout
+      serverSelectionTimeoutMS: 30000, // 30 seconds timeout for remote connections
+      socketTimeoutMS: 45000, // 45 seconds socket timeout
+      connectTimeoutMS: 30000, // 30 seconds connection timeout
+      maxPoolSize: 10, // Maximum number of connections in the pool
+      minPoolSize: 2, // Minimum number of connections in the pool
+      retryWrites: true, // Retry writes on network errors
+      retryReads: true, // Retry reads on network errors
+      heartbeatFrequencyMS: 10000, // Heartbeat frequency
     });
 
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
@@ -34,9 +41,9 @@ const connectDB = async () => {
     if (error.message.includes('Authentication failed') || error.message.includes('auth')) {
       console.error('\n💡 Authentication failed. Try these fixes:');
       console.error('\nFix 1: Remove authSource from connection string');
-      console.error('   Update .env: MONGODB_URI=mongodb://admin:vJUm4yLOD8eUZsBqtdGJYU47JsJFe8rO@213.210.37.237:32770/hrms');
+      console.error('   Update .env: MONGODB_URI=mongodb://admin:vJUm4yLOD8eUZsBqtdGJYU47JsJFe8rO@213.210.37.237:32768/hrms');
       console.error('\nFix 2: Try with authSource=admin');
-      console.error('   Update .env: MONGODB_URI=mongodb://admin:vJUm4yLOD8eUZsBqtdGJYU47JsJFe8rO@213.210.37.237:32770/hrms?authSource=admin');
+      console.error('   Update .env: MONGODB_URI=mongodb://admin:vJUm4yLOD8eUZsBqtdGJYU47JsJFe8rO@213.210.37.237:32768/hrms?authSource=admin');
       console.error('\nFix 3: Run detailed test to find working connection:');
       console.error('   npm run test-vps-detailed');
     } else {
