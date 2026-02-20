@@ -21,21 +21,45 @@ const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
   : ['http://localhost:3000', 'https://hrmssystem.vercel.app'];
 
+console.log('CORS Allowed Origins:', allowedOrigins);
+
 app.use(
   cors({
     origin: function (origin, callback) {
       // Allow requests with no origin (like mobile apps or curl requests)
-      if (!origin) return callback(null, true);
+      if (!origin) {
+        console.log('CORS: Request with no origin, allowing');
+        return callback(null, true);
+      }
       
       if (allowedOrigins.indexOf(origin) !== -1) {
+        console.log('CORS: Origin allowed:', origin);
         callback(null, true);
       } else {
-        callback(null, true); // Allow all origins for now (can restrict later)
+        // Log for debugging
+        console.log('CORS: Origin not in allowed list:', origin);
+        console.log('CORS: Allowed origins:', allowedOrigins);
+        // Allow all origins for production (can restrict later)
+        callback(null, true);
       }
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range'],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   })
 );
+
+// Handle preflight requests explicitly for all routes
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(204);
+});
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
