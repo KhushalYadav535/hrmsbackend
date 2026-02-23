@@ -88,12 +88,27 @@ exports.login = asyncHandler(async (req, res) => {
     }
 
     // Check for user
-    const query = { email };
+    // Super Admin can login with any tenantId or without tenantId (manages all tenants)
+    let user = null;
+    
+    // First, try to find user with tenantId if provided
     if (tenantId) {
-      query.tenantId = tenantId;
+      const query = { email, tenantId };
+      user = await User.findOne(query).populate('tenantId');
     }
-
-    const user = await User.findOne(query).populate('tenantId');
+    
+    // If not found, try to find Super Admin (can login regardless of tenantId)
+    if (!user) {
+      user = await User.findOne({ 
+        email,
+        role: 'Super Admin'
+      }).populate('tenantId');
+    }
+    
+    // If still not found, try to find any user with this email (fallback)
+    if (!user) {
+      user = await User.findOne({ email }).populate('tenantId');
+    }
 
     if (!user) {
       // Log failed login attempt (skip audit log if tenantId not provided to avoid errors)
@@ -225,6 +240,13 @@ exports.login = asyncHandler(async (req, res) => {
     user.accountLockedUntil = null;
     user.lastLogin = new Date();
     
+    // BR-P0-001 Bug 1: Initialize session management
+    user.lastActivityAt = new Date();
+    user.forcedLogoutAt = null; // Clear any previous forced logout
+    // Generate session ID for concurrent session detection
+    const sessionId = crypto.randomBytes(16).toString('hex');
+    user.sessionId = sessionId;
+    
     // Normalize status if it's invalid (fix for existing data with lowercase 'active')
     if (user.status && typeof user.status === 'string') {
       const statusLower = user.status.toLowerCase();
@@ -282,7 +304,8 @@ exports.login = asyncHandler(async (req, res) => {
       // Don't fail login if audit log fails
     }
 
-    const token = generateToken(user._id);
+    // BR-P0-001 Bug 1: Generate token with sessionId for concurrent session detection
+    const token = generateToken(user._id, sessionId);
     
     // Get tenant details - handle both populated and non-populated cases
     let tenant = null;
@@ -300,9 +323,23 @@ exports.login = asyncHandler(async (req, res) => {
       }
     }
     
+    // BR-P0-001 Bug 3: Store JWT in HttpOnly cookie (not localStorage)
+    // Cookie expires in 7 days (matching JWT expiry)
+    const cookieOptions = {
+      httpOnly: true, // Prevents JavaScript access (XSS protection)
+      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+      sameSite: 'lax', // CSRF protection
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
+      path: '/', // Available for all routes
+    };
+    
+    res.cookie('token', token, cookieOptions);
+    
+    // Also return token in response body for backward compatibility during migration
+    // TODO: Remove this after frontend migration is complete
     res.status(200).json({
       success: true,
-      token,
+      token, // Keep for backward compatibility
       tenant: tenant ? {
         id: tenant._id.toString(),
         name: tenant.name,
@@ -316,6 +353,7 @@ exports.login = asyncHandler(async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        payrollSubRole: user.payrollSubRole || null,
         tenantId: user.tenantId && user.tenantId._id ? user.tenantId._id.toString() : (user.tenantId ? user.tenantId.toString() : null),
         passwordExpiryDate: user.passwordExpiryDate,
         mfaEnabled: user.mfaEnabled,
@@ -853,4 +891,65 @@ exports.disableMFA = asyncHandler(async (req, res) => {
     success: true,
     message: 'MFA disabled successfully',
   });
+});
+
+// @desc    Logout user
+// @route   POST /api/auth/logout
+// @access  Private
+// BR-P0-001 Bug 1 & 3: Logout endpoint to clear HttpOnly cookie
+exports.logout = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user?._id;
+    const tenantId = req.user?.tenantId?._id || req.user?.tenantId;
+
+    // Clear HttpOnly cookie
+    res.cookie('token', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 0, // Immediately expire
+      path: '/',
+    });
+
+    // Log logout action
+    if (userId && tenantId) {
+      try {
+        await AuditLog.create({
+          tenantId: tenantId._id || tenantId,
+          userId: userId,
+          userName: req.user.name || req.user.email,
+          userEmail: req.user.email,
+          action: 'Logout',
+          module: 'Authentication',
+          entityType: 'User',
+          details: 'User logged out successfully',
+          ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+          userAgent: req.get('user-agent') || 'Unknown',
+          status: 'Success',
+        });
+      } catch (auditError) {
+        console.error('Audit log error:', auditError);
+        // Don't fail logout if audit log fails
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully',
+    });
+  } catch (error) {
+    console.error('Logout error:', error);
+    // Even if there's an error, clear the cookie
+    res.cookie('token', '', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 0,
+      path: '/',
+    });
+    res.status(200).json({
+      success: true,
+      message: 'Logged out successfully',
+    });
+  }
 });

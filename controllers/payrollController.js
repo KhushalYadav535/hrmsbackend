@@ -2,8 +2,9 @@ const Payroll = require('../models/Payroll');
 const Employee = require('../models/Employee');
 const Attendance = require('../models/Attendance');
 const LeaveRequest = require('../models/LeaveRequest');
+const LoanEmiSchedule = require('../models/LoanEmiSchedule');
 const AuditLog = require('../models/AuditLog');
-const { getLoanDeductions } = require('./loanController');
+const { getLoanDeductions, processLoanEMIDeductions } = require('../utils/loanPayrollIntegration');
 const { sendNotification, payrollTemplates } = require('../utils/notificationService');
 const mongoose = require('mongoose');
 
@@ -354,6 +355,14 @@ exports.getPayroll = async (req, res) => {
 // @access  Private
 exports.createPayroll = async (req, res) => {
   try {
+    // BRD: Payroll Maker-Checker - Only Maker can create payroll (Checker cannot)
+    if (req.user.role === 'Payroll Administrator' && req.user.payrollSubRole === 'Checker') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Payroll Checker can only approve/reject, not create. Only Payroll Maker can create.',
+      });
+    }
+
     // Add tenantId to body
     req.body.tenantId = req.tenantId;
 
@@ -447,6 +456,22 @@ exports.processPayroll = async (req, res) => {
       });
     }
 
+    // BRD: Payroll Maker-Checker - Only Maker can process payroll (Checker cannot)
+    if (req.user.role === 'Payroll Administrator') {
+      if (req.user.payrollSubRole === 'Checker') {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Payroll Checker can only approve payroll, not process. Only Payroll Maker can process.',
+        });
+      }
+      // Maker or null (legacy) can process
+    } else if (req.user.role !== 'Super Admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Only Payroll Administrators (Maker) can process payroll.',
+      });
+    }
+
     // BRD Requirement: Validate processing deadline
     const deadlineCheck = validateProcessingDeadline(month, year);
     if (!deadlineCheck.valid && deadlineCheck.warning) {
@@ -526,14 +551,30 @@ exports.processPayroll = async (req, res) => {
         const annualSalary = grossSalary * 12;
         const incomeTax = calculateIncomeTax(annualSalary);
         
-        // BRD Requirement: Loan deductions integration
+        // BRD Requirement: Loan deductions integration (NEW - Auto-deduct EMI)
         let loanDeductions = 0;
+        let loanEMIDetails = [];
         try {
-          const loanData = await getLoanDeductions(employee._id, req.tenantId);
-          loanDeductions = loanData?.totalDeduction || 0;
+          // Process EMI deductions for current payroll period
+          const payrollDate = new Date(year, month - 1, 1); // First day of payroll month
+          const loanProcessing = await processLoanEMIDeductions(
+            employee._id,
+            req.tenantId,
+            null, // payrollId will be set after payroll record is created
+            payrollDate
+          );
+          loanDeductions = loanProcessing.totalDeduction;
+          loanEMIDetails = loanProcessing.processedLoans;
         } catch (loanError) {
-          console.error(`[processPayroll] Error getting loan deductions for ${employee.employeeCode}:`, loanError);
-          loanDeductions = 0; // Continue with 0 loan deductions if error
+          console.error(`[processPayroll] Error processing loan EMI deductions for ${employee.employeeCode}:`, loanError);
+          // Fallback to simple deduction calculation
+          try {
+            const loanData = await getLoanDeductions(employee._id, req.tenantId);
+            loanDeductions = loanData?.totalDeduction || 0;
+          } catch (fallbackError) {
+            console.error(`[processPayroll] Fallback loan deduction failed:`, fallbackError);
+            loanDeductions = 0;
+          }
         }
         
         // BRD Requirement: LOP calculation from attendance and leave
@@ -589,6 +630,7 @@ exports.processPayroll = async (req, res) => {
           lopDays,
           lopDeduction,
           loanDeductions: loanDeductions,
+          loanEMIDetails: loanEMIDetails, // Array of processed EMI details
           arrearsAmount: 0,
           netSalary,
           status: 'Draft',
@@ -599,6 +641,28 @@ exports.processPayroll = async (req, res) => {
         });
         
         await payroll.save();
+
+        // Update loan EMI records with payroll ID (if EMI was deducted and payrollId was null)
+        if (loanEMIDetails.length > 0 && payroll._id) {
+          try {
+            // Re-process EMI deductions with actual payroll ID
+            const emiUpdate = await processLoanEMIDeductions(
+              employee._id,
+              req.tenantId,
+              payroll._id,
+              new Date(year, month - 1, 1)
+            );
+            // Update loan deductions if different
+            if (emiUpdate.totalDeduction !== loanDeductions) {
+              payroll.loanDeductions = emiUpdate.totalDeduction;
+              payroll.netSalary = Math.round(grossSalary - (epfData.employee + esiData.employee + incomeTax + professionalTax + lopDeduction + emiUpdate.totalDeduction));
+              await payroll.save();
+            }
+          } catch (emiUpdateError) {
+            console.error(`[processPayroll] Error updating EMI payroll links:`, emiUpdateError);
+            // Continue - this is not critical
+          }
+        }
 
         // Debug: Log first payroll record to verify fields
         if (processedPayrolls.length === 0) {
@@ -654,6 +718,26 @@ exports.processPayroll = async (req, res) => {
     console.log(`[processPayroll] Summary: ${processedPayrolls.length} processed, ${errors.length} errors, ${employees.length} total employees`);
     if (errors.length > 0) {
       console.log(`[processPayroll] Errors:`, errors.slice(0, 5)); // Log first 5 errors
+    }
+
+    // BR-P0-001 Bug 4: Audit trail for payroll processing
+    try {
+      await AuditLog.create({
+        tenantId: req.tenantId,
+        userId: req.user._id,
+        userName: req.user.name || req.user.email,
+        userEmail: req.user.email,
+        action: 'Process',
+        module: 'Payroll',
+        entityType: 'Payroll',
+        details: `Payroll processed for ${month} ${year} - ${processedPayrolls.length} records created, ${errors.length} errors`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+        userAgent: req.get('user-agent') || 'Unknown',
+        status: 'Success',
+      });
+    } catch (auditError) {
+      console.error('Audit log error:', auditError);
+      // Don't fail payroll processing if audit log fails
     }
 
     res.status(200).json({
@@ -830,11 +914,18 @@ exports.submitPayroll = async (req, res) => {
       });
     }
 
-    // BRD Requirement: Only Payroll Administrator can submit
-    if (req.user.role !== 'Payroll Administrator' && req.user.role !== 'Super Admin') {
+    // BRD: Payroll Maker-Checker - Only Maker can submit (Checker cannot)
+    if (req.user.role === 'Payroll Administrator') {
+      if (req.user.payrollSubRole === 'Checker') {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Payroll Checker can only approve/reject, not submit. Only Payroll Maker can submit.',
+        });
+      }
+    } else if (req.user.role !== 'Super Admin') {
       return res.status(403).json({
         success: false,
-        message: 'Access denied. Only Payroll Administrators can submit payroll.',
+        message: 'Access denied. Only Payroll Administrators (Maker) can submit payroll.',
       });
     }
 
@@ -902,7 +993,17 @@ exports.approvePayroll = async (req, res) => {
       });
     }
 
-    // Check if user has permission
+    // BRD: Payroll Maker-Checker - Only Checker can approve (Maker cannot)
+    if (req.user.role === 'Payroll Administrator') {
+      if (req.user.payrollSubRole === 'Maker') {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Payroll Maker cannot approve payroll. Only Payroll Checker can approve.',
+        });
+      }
+      // Checker or null (legacy) can approve
+    }
+
     const canApprove = req.user.role === 'Payroll Administrator' || 
                       req.user.role === 'Finance Administrator' || 
                       req.user.role === 'Super Admin';
@@ -1056,7 +1157,16 @@ exports.rejectPayroll = async (req, res) => {
       });
     }
 
-    // Check if user has permission
+    // BRD: Payroll Maker-Checker - Only Checker can reject (Maker cannot)
+    if (req.user.role === 'Payroll Administrator') {
+      if (req.user.payrollSubRole === 'Maker') {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied. Payroll Maker cannot reject payroll. Only Payroll Checker can reject.',
+        });
+      }
+    }
+
     const canReject = req.user.role === 'Payroll Administrator' || 
                      req.user.role === 'Finance Administrator' || 
                      req.user.role === 'Super Admin';
@@ -1144,6 +1254,14 @@ exports.updatePayroll = async (req, res) => {
       });
     }
 
+    // BRD: Payroll Maker-Checker - Only Maker can update payroll (Checker cannot)
+    if (req.user.role === 'Payroll Administrator' && req.user.payrollSubRole === 'Checker') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Payroll Checker can only approve/reject, not edit. Only Payroll Maker can update.',
+      });
+    }
+
     // BRD Requirement: Only allow updates in Draft status
     if (payroll.status !== 'Draft' && !req.body.status) {
       return res.status(400).json({
@@ -1216,6 +1334,14 @@ exports.deletePayroll = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Payroll record not found',
+      });
+    }
+
+    // BRD: Payroll Maker-Checker - Only Maker can delete payroll (Checker cannot)
+    if (req.user.role === 'Payroll Administrator' && req.user.payrollSubRole === 'Checker') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Payroll Checker can only approve/reject, not delete. Only Payroll Maker can delete.',
       });
     }
 

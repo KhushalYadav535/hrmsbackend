@@ -8,6 +8,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "seed": "node scripts/seedDemoUsers.js",
+    "seed-platform-admin": "node scripts/seedPlatformAdminDefaults.js",
     "seed-salary": "node scripts/seedSalaryStructures.js",
     "seed-leave": "node scripts/seedLeavePolicies.js",
     "seed-tenant-users": "node scripts/seedTenantUsers.js",
@@ -17,7 +18,9 @@
     "test-vps-detailed": "node scripts/testVPSConnectionDetailed.js",
     "setup-mongo-user": "node scripts/setupMongoDBUser.js",
     "migrate-vps": "node scripts/migrateToVPS.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [
     "hrms",
@@ -29,8 +32,12 @@
   "dependencies": {
     "axios": "^1.13.4",
     "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
+    "csv-writer": "^1.6.0",
     "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "express-async-handler": "^1.2.0",
     "express-validator": "^7.0.1",
@@ -42,9 +49,25 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.15",
     "speakeasy": "^2.0.0",
-    "ssh2-sftp-client": "^12.0.1"
+    "ssh2-sftp-client": "^12.0.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "jest": "^29.7.0",
     "nodemon": "^3.1.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "utils/**/*.js",
+      "models/**/*.js",
+      "controllers/**/*.js",
+      "!**/node_modules/**"
+    ],
+    "coverageDirectory": "coverage",
+    "verbose": true
   }
 }

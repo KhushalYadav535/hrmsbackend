@@ -2,8 +2,116 @@ const Normalization = require('../models/Normalization');
 const ManagerAppraisal = require('../models/ManagerAppraisal');
 const AppraisalCycle = require('../models/AppraisalCycle');
 const Employee = require('../models/Employee');
+const Department = require('../models/Department');
 const AuditLog = require('../models/AuditLog');
 const { asyncHandler } = require('../middleware/errorHandler');
+
+/**
+ * Get normalization distribution preview (without creating record)
+ * BRD Requirement: BR-AMS-007
+ */
+exports.getNormalizationPreview = asyncHandler(async (req, res) => {
+  const { appraisalCycleId, departmentId, departmentName } = req.query;
+  if (!appraisalCycleId) {
+    return res.status(400).json({ success: false, message: 'appraisalCycleId required' });
+  }
+
+  const cycle = await AppraisalCycle.findById(appraisalCycleId);
+  if (!cycle || cycle.tenantId.toString() !== req.tenantId.toString()) {
+    return res.status(404).json({ success: false, message: 'Cycle not found' });
+  }
+
+  const filter = { tenantId: req.tenantId, appraisalCycleId, status: 'Submitted' };
+  if (departmentId || departmentName) {
+    let deptName = departmentName;
+    if (departmentId) {
+      const dept = await Department.findOne({ _id: departmentId, tenantId: req.tenantId });
+      if (dept) deptName = dept.name;
+    }
+    if (deptName) {
+      const employees = await Employee.find({ tenantId: req.tenantId, department: deptName }).select('_id');
+      filter.employeeId = { $in: employees.map((e) => e._id) };
+    }
+  }
+
+  const appraisals = await ManagerAppraisal.find(filter)
+    .populate('employeeId', 'firstName lastName employeeCode department')
+    .lean();
+
+  const distribution = { exceptional: 0, exceeds: 0, meets: 0, needsImprovement: 0, unsatisfactory: 0 };
+  appraisals.forEach((ap) => {
+    const rating = ap.overallRating || ap.normalizedRating || 0;
+    if (rating === 5) distribution.exceptional++;
+    else if (rating === 4) distribution.exceeds++;
+    else if (rating === 3) distribution.meets++;
+    else if (rating === 2) distribution.needsImprovement++;
+    else if (rating === 1) distribution.unsatisfactory++;
+  });
+
+  const total = appraisals.length;
+  const targetDistribution = cycle.bellCurveDistribution || {
+    exceptional: 10,
+    exceeds: 20,
+    meets: 60,
+    needsImprovement: 8,
+    unsatisfactory: 2,
+  };
+
+  const actualDistributionCounts = { ...distribution };
+  const actualDistributionPct = total > 0
+    ? {
+        exceptional: Math.round((distribution.exceptional / total) * 1000) / 10,
+        exceeds: Math.round((distribution.exceeds / total) * 1000) / 10,
+        meets: Math.round((distribution.meets / total) * 1000) / 10,
+        needsImprovement: Math.round((distribution.needsImprovement / total) * 1000) / 10,
+        unsatisfactory: Math.round((distribution.unsatisfactory / total) * 1000) / 10,
+      }
+    : { exceptional: 0, exceeds: 0, meets: 0, needsImprovement: 0, unsatisfactory: 0 };
+
+  const byDepartment = {};
+  appraisals.forEach((ap) => {
+    const dept = ap.employeeId?.department || 'Unknown';
+    if (!byDepartment[dept]) {
+      byDepartment[dept] = { exceptional: 0, exceeds: 0, meets: 0, needsImprovement: 0, unsatisfactory: 0, employees: 0 };
+    }
+    byDepartment[dept].employees++;
+    const r = ap.overallRating || ap.normalizedRating || 0;
+    if (r === 5) byDepartment[dept].exceptional++;
+    else if (r === 4) byDepartment[dept].exceeds++;
+    else if (r === 3) byDepartment[dept].meets++;
+    else if (r === 2) byDepartment[dept].needsImprovement++;
+    else if (r === 1) byDepartment[dept].unsatisfactory++;
+  });
+
+  res.status(200).json({
+    success: true,
+    data: {
+      cycleName: cycle.cycleName,
+      totalEmployees: total,
+      currentDistribution: actualDistributionCounts,
+      actualDistributionPct,
+      targetDistribution,
+      byDepartment: Object.entries(byDepartment).map(([department, d]) => ({
+        department,
+        employees: d.employees,
+        currentDistribution: {
+          exceptional: d.exceptional,
+          exceeds: d.exceeds,
+          meets: d.meets,
+          needsImprovement: d.needsImprovement,
+          unsatisfactory: d.unsatisfactory,
+        },
+        targetDistribution: {
+          exceptional: Math.round((targetDistribution.exceptional / 100) * d.employees),
+          exceeds: Math.round((targetDistribution.exceeds / 100) * d.employees),
+          meets: Math.round((targetDistribution.meets / 100) * d.employees),
+          needsImprovement: Math.round((targetDistribution.needsImprovement / 100) * d.employees),
+          unsatisfactory: Math.round((targetDistribution.unsatisfactory / 100) * d.employees),
+        },
+      })),
+    },
+  });
+});
 
 /**
  * Get normalization records
@@ -52,8 +160,10 @@ exports.createNormalization = asyncHandler(async (req, res) => {
     status: 'Submitted',
   };
   if (departmentId) {
-    const employees = await Employee.find({ tenantId: req.tenantId, department: departmentId }).select('_id');
-    filter.employeeId = { $in: employees.map(e => e._id) };
+    const dept = await Department.findOne({ _id: departmentId, tenantId: req.tenantId });
+    const deptName = dept?.name || departmentId;
+    const employees = await Employee.find({ tenantId: req.tenantId, department: deptName }).select('_id');
+    filter.employeeId = { $in: employees.map((e) => e._id) };
   }
 
   const appraisals = await ManagerAppraisal.find(filter);

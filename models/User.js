@@ -97,6 +97,14 @@ const userSchema = new mongoose.Schema({
     ],
     required: true,
   },
+  // BRD: Payroll Maker-Checker - Tenant Admin assigns Maker or Checker for Payroll Administrator
+  // Maker: create/edit payroll; Checker: approve/reject only. null = legacy (both until explicitly set)
+  payrollSubRole: {
+    type: String,
+    enum: ['Maker', 'Checker'],
+    default: null,
+    comment: 'BRD: Maker=process payroll, Checker=approve only. Required when role=Payroll Administrator',
+  },
   designation: {
     type: String,
     trim: true,
@@ -146,6 +154,19 @@ const userSchema = new mongoose.Schema({
   },
   lastLogin: {
     type: Date,
+  },
+  // BR-P0-001 Bug 1: Session management fields
+  lastActivityAt: {
+    type: Date,
+    comment: 'Last activity timestamp for session timeout (30 min inactivity)',
+  },
+  forcedLogoutAt: {
+    type: Date,
+    comment: 'Timestamp when admin forced logout (user logged out on next request)',
+  },
+  sessionId: {
+    type: String,
+    comment: 'Current session ID for concurrent session detection',
   },
   createdAt: {
     type: Date,

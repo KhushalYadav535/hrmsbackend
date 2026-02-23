@@ -135,13 +135,13 @@ exports.activateCycle = asyncHandler(async (req, res) => {
   await AppraisalCycle.updateMany(
     {
       tenantId: req.tenantId,
-      status: 'Active',
+      status: 'ACTIVE',
       _id: { $ne: cycle._id },
     },
-    { status: 'Completed' }
+    { status: 'CLOSED' }
   );
 
-  cycle.status = 'Active';
+  cycle.status = 'ACTIVE';
   await cycle.save();
 
   // Audit log

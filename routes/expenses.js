@@ -10,9 +10,11 @@ const {
 } = require('../controllers/expenseController');
 const { protect, authorize } = require('../middleware/auth');
 const { setTenant } = require('../middleware/tenant');
+const { requireModule } = require('../middleware/modulePermission');
 
 router.use(protect);
 router.use(setTenant);
+router.use(requireModule('TRAVEL')); // BRD: DM-037 - Module access protection
 
 router
   .route('/')

@@ -11,7 +11,7 @@ const asyncHandler = require('../middleware/errorHandler').asyncHandler;
 // @access  Private (Tenant Admin, HR Administrator)
 // BRD: BR-UAM-001
 exports.createUser = asyncHandler(async (req, res) => {
-  const { email, name, employeeId, role, designation, department, username } = req.body;
+  const { email, name, employeeId, role, designation, department, username, payrollSubRole } = req.body;
 
   // Check if user already exists
   const existingUser = await User.findOne({
@@ -51,6 +51,7 @@ exports.createUser = asyncHandler(async (req, res) => {
     employeeId,
     password: tempPassword,
     role: role || 'Employee',
+    payrollSubRole: role === 'Payroll Administrator' && (payrollSubRole === 'Maker' || payrollSubRole === 'Checker') ? payrollSubRole : null,
     designation,
     department,
     status: 'Pending Activation',
@@ -165,7 +166,7 @@ exports.getUser = asyncHandler(async (req, res) => {
 // @access  Private (Tenant Admin, HR Administrator)
 exports.updateUser = asyncHandler(async (req, res) => {
   try {
-    const { name, role, designation, department, status } = req.body;
+    const { name, role, designation, department, status, payrollSubRole } = req.body;
 
     const user = await User.findOne({
       _id: req.params.id,
@@ -192,6 +193,12 @@ exports.updateUser = asyncHandler(async (req, res) => {
     if (designation) user.designation = designation;
     if (department) user.department = department;
     if (status) user.status = status;
+    // BRD: Payroll Maker-Checker - clear payrollSubRole if role changes away from Payroll Administrator
+    if (role && role !== 'Payroll Administrator') {
+      user.payrollSubRole = null;
+    } else if (payrollSubRole !== undefined) {
+      user.payrollSubRole = payrollSubRole === '' || payrollSubRole === null ? null : payrollSubRole;
+    }
 
     await user.save();
 

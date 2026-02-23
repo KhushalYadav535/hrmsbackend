@@ -30,6 +30,17 @@ const leaveRequestSchema = new mongoose.Schema({
   days: {
     type: Number,
     required: true,
+    comment: 'Number of days (can be 0.5 for half-day)',
+  },
+  isHalfDay: {
+    type: Boolean,
+    default: false,
+    comment: 'BRD: BR-P1-003 - Half-day leave support',
+  },
+  halfDayType: {
+    type: String,
+    enum: ['FIRST_HALF', 'SECOND_HALF'],
+    comment: 'BRD: BR-P1-003 - First half (morning) or Second half (afternoon)',
   },
   reason: {
     type: String,

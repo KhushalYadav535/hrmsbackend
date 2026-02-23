@@ -323,14 +323,17 @@ exports.getLeaveBalance = async (req, res) => {
 exports.createLeave = async (req, res) => {
   try {
     // Validate required fields
-    const { leaveType, startDate, endDate, reason } = req.body;
-    
-    if (!leaveType || !startDate || !endDate || !reason) {
+    const { leaveType, startDate, endDate, reason, isHalfDay, halfDayType } = req.body;
+
+    if (!leaveType || !startDate || !reason) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required fields: leaveType, startDate, endDate, and reason are required',
+        message: 'Missing required fields: leaveType, startDate, and reason are required',
       });
     }
+
+    // BR-P1-003: Half-day leave - endDate can be derived from startDate
+    const isHalfDayLeave = !!isHalfDay && (halfDayType === 'FIRST_HALF' || halfDayType === 'SECOND_HALF');
 
     // Normalize leave type (trim whitespace) - needed early for validation
     const normalizedLeaveType = leaveType.trim();
@@ -350,8 +353,8 @@ exports.createLeave = async (req, res) => {
 
     // Parse dates
     const start = new Date(startDate);
-    const end = new Date(endDate);
-    
+    const end = isHalfDayLeave ? new Date(startDate) : new Date(endDate);
+
     // Validate dates
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
       return res.status(400).json({
@@ -360,17 +363,17 @@ exports.createLeave = async (req, res) => {
       });
     }
 
-    // Check if start date is before end date
-    if (start > end) {
+    // Check if start date is before end date (skip for half-day)
+    if (!isHalfDayLeave && start > end) {
       return res.status(400).json({
         success: false,
         message: 'Start date cannot be after end date',
       });
     }
 
-    // Calculate days (inclusive of both start and end dates)
+    // Calculate days: 0.5 for half-day (BR-P1-003), else inclusive of both start and end
     const diffTime = Math.abs(end - start);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    const diffDays = isHalfDayLeave ? 0.5 : Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
     // BRD Requirement: Medical certificate validation for sick leave > 3 days
     if (normalizedLeaveType.toLowerCase().includes('sick') && diffDays > 3) {
@@ -597,6 +600,7 @@ exports.createLeave = async (req, res) => {
       appliedDate: new Date(),
       isSandwichLeave: isSandwichLeave,
       sandwichLeaveDetails: sandwichDetails,
+      ...(isHalfDayLeave && { isHalfDay: true, halfDayType }),
     };
 
     // Add medical certificate if provided

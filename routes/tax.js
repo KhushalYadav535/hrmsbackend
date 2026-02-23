@@ -1,4 +1,5 @@
 const express = require('express');
+const { requireModule } = require('../middleware/modulePermission');
 const {
   createDeclaration,
   getDeclarations,
@@ -42,6 +43,7 @@ const router = express.Router();
 // All routes are protected and tenant-scoped
 router.use(protect);
 router.use(setTenant);
+router.use(requireModule('TAX')); // BRD: DM-037 - Module access protection
 
 // Tax Declarations
 router

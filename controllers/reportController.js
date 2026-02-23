@@ -4,7 +4,21 @@ const Job = require('../models/Job');
 const LeaveRequest = require('../models/LeaveRequest');
 const Expense = require('../models/Expense');
 const Payroll = require('../models/Payroll');
+const ScheduledReport = require('../models/ScheduledReport');
+const ReportService = require('../services/reportService');
 const mongoose = require('mongoose');
+
+// Standard report types for BR-P1-006
+const STANDARD_REPORT_TYPES = [
+  { id: 'EMPLOYEE_MASTER', name: 'Employee Master', description: 'Complete employee list with details', category: 'Personnel' },
+  { id: 'PAYROLL_SUMMARY', name: 'Payroll Summary', description: 'Monthly payroll by employee', category: 'Payroll' },
+  { id: 'ATTENDANCE_SUMMARY', name: 'Attendance Summary', description: 'Attendance by employee for period', category: 'Attendance' },
+  { id: 'LEAVE_BALANCE', name: 'Leave Balance', description: 'Leave entitlement and balance', category: 'Leave' },
+  { id: 'PERFORMANCE_RATING', name: 'Performance Rating', description: 'Appraisal ratings and increments', category: 'Performance' },
+  { id: 'GRIEVANCE_STATUS', name: 'Grievance Status', description: 'Open and closed grievances', category: 'Grievance' },
+  { id: 'TRANSFER_HISTORY', name: 'Transfer History', description: 'Employee transfer records', category: 'Transfers' },
+  { id: 'LOAN_SUMMARY', name: 'Loan Summary', description: 'Employee loans and outstanding', category: 'Loans' },
+];
 
 // @desc    Get dashboard statistics for Tenant Admin
 // @route   GET /api/reports/dashboard-stats
@@ -321,5 +335,91 @@ exports.getComprehensiveReports = async (req, res) => {
       message: 'Server error',
       error: error.message,
     });
+  }
+};
+
+// @desc    Get standard report types (BR-P1-006)
+// @route   GET /api/reports/standard-types
+exports.getStandardReportTypes = async (req, res) => {
+  res.json({
+    success: true,
+    data: STANDARD_REPORT_TYPES,
+  });
+};
+
+// @desc    Generate standard report (BR-P1-006)
+// @route   POST /api/reports/standard
+exports.generateStandardReport = async (req, res) => {
+  try {
+    const { reportType, filters = {} } = req.body;
+    if (!reportType || !STANDARD_REPORT_TYPES.find((t) => t.id === reportType)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report type',
+      });
+    }
+    const { data, columns } = await ReportService.generateStandardReport(req.tenantId, reportType, filters);
+    res.json({
+      success: true,
+      data: { rows: data, columns },
+    });
+  } catch (error) {
+    console.error('Generate standard report error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to generate report',
+    });
+  }
+};
+
+// @desc    Get scheduled reports (BR-P1-006)
+// @route   GET /api/reports/scheduled
+exports.getScheduledReports = async (req, res) => {
+  try {
+    const scheduled = await ScheduledReport.find({ tenantId: req.tenantId })
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ success: true, data: scheduled });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Create scheduled report (BR-P1-006)
+// @route   POST /api/reports/scheduled
+exports.createScheduledReport = async (req, res) => {
+  try {
+    const { reportName, reportType, frequency, scheduleConfig, recipients, format, filters } = req.body;
+    const doc = await ScheduledReport.create({
+      tenantId: req.tenantId,
+      reportName: reportName || reportType || 'Scheduled Report',
+      templateId: new mongoose.Types.ObjectId(),
+      frequency: frequency || 'MONTHLY',
+      scheduleConfig: scheduleConfig || { time: '09:00', timezone: 'Asia/Kolkata' },
+      recipients: recipients || [],
+      format: format || 'EXCEL',
+      filters: { ...(filters || {}), reportType },
+      createdBy: req.user._id,
+    });
+    res.status(201).json({ success: true, data: doc });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Update scheduled report (BR-P1-006)
+// @route   PATCH /api/reports/scheduled/:id
+exports.updateScheduledReport = async (req, res) => {
+  try {
+    const doc = await ScheduledReport.findOneAndUpdate(
+      { _id: req.params.id, tenantId: req.tenantId },
+      req.body,
+      { new: true }
+    );
+    if (!doc) return res.status(404).json({ success: false, message: 'Not found' });
+    res.json({ success: true, data: doc });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 };

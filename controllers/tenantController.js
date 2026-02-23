@@ -1,6 +1,52 @@
 const Tenant = require('../models/Tenant');
 const AuditLog = require('../models/AuditLog');
 
+// @desc    Create tenant (Super Admin only)
+// @route   POST /api/tenants
+// @access  Private (Super Admin)
+exports.createTenant = async (req, res) => {
+  try {
+    const { name, code, location } = req.body;
+    if (!name || !code) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name and code are required',
+      });
+    }
+    const codeUpper = code.toUpperCase().trim();
+    const existing = await Tenant.findOne({ code: codeUpper });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tenant with this code already exists',
+      });
+    }
+    const tenant = await Tenant.create({
+      name: name.trim(),
+      code: codeUpper,
+      location: location || '',
+    });
+    res.status(201).json({
+      success: true,
+      data: {
+        id: tenant._id.toString(),
+        name: tenant.name,
+        code: tenant.code,
+        location: tenant.location,
+        status: tenant.status,
+        employees: tenant.employees,
+      },
+      message: 'Tenant created successfully',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+      error: error.message,
+    });
+  }
+};
+
 // @desc    Get all tenants (Super Admin only)
 // @route   GET /api/tenants
 // @access  Private (Super Admin)

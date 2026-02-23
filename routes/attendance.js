@@ -13,9 +13,11 @@ const {
 } = require('../controllers/attendanceController');
 const { protect, authorize } = require('../middleware/auth');
 const { setTenant } = require('../middleware/tenant');
+const { requireModule } = require('../middleware/modulePermission');
 
 router.use(protect);
 router.use(setTenant);
+router.use(requireModule('ATTENDANCE')); // BRD: DM-037 - Module access protection
 
 // Check-in/Check-out routes (available to all authenticated users)
 router.post('/checkin', checkIn);

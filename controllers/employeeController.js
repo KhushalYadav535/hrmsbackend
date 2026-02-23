@@ -1,5 +1,11 @@
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
+const EmployeeBankAccount = require('../models/EmployeeBankAccount');
+const EmployeeEmergencyContact = require('../models/EmployeeEmergencyContact');
+const EmployeeNominee = require('../models/EmployeeNominee');
+const EmployeePreviousEmployment = require('../models/EmployeePreviousEmployment');
+const EmployeeFamilyDetail = require('../models/EmployeeFamilyDetail');
+const { maskEmployeeData, maskBankAccountData, maskArray } = require('../utils/masking');
 
 // @desc    Get all employees
 // @route   GET /api/employees
@@ -67,10 +73,13 @@ exports.getEmployees = async (req, res) => {
       console.log(`[getEmployees] Role: ${req.user.role}, Tenant: ${req.tenantId}, Filter:`, JSON.stringify(filter), `Found: 0 employees`);
     }
     
+    // Mask sensitive data for all employees
+    const maskedEmployees = employees.map(emp => maskEmployeeData(emp.toObject()));
+    
     res.status(200).json({
       success: true,
-      count: employees.length,
-      data: employees,
+      count: maskedEmployees.length,
+      data: maskedEmployees,
     });
   } catch (error) {
     console.error('[getEmployees] Error:', error);
@@ -119,9 +128,29 @@ exports.getEmployee = async (req, res) => {
       });
     }
 
+    // Get related data
+    const [bankAccounts, emergencyContacts, nominees, previousEmployments, familyDetails] = await Promise.all([
+      EmployeeBankAccount.find({ tenantId: req.tenantId, employeeId: employee._id }).sort({ isPrimary: -1 }),
+      EmployeeEmergencyContact.find({ tenantId: req.tenantId, employeeId: employee._id }),
+      EmployeeNominee.find({ tenantId: req.tenantId, employeeId: employee._id }),
+      EmployeePreviousEmployment.find({ tenantId: req.tenantId, employeeId: employee._id }).sort({ startDate: -1 }),
+      EmployeeFamilyDetail.findOne({ tenantId: req.tenantId, employeeId: employee._id }),
+    ]);
+
+    // Convert employee to object and add related data
+    const employeeData = employee.toObject();
+    employeeData.bankAccounts = maskArray(bankAccounts, maskBankAccountData);
+    employeeData.emergencyContacts = emergencyContacts;
+    employeeData.nominees = nominees;
+    employeeData.previousEmployments = previousEmployments;
+    employeeData.familyDetails = familyDetails;
+
+    // Mask sensitive employee data
+    const maskedEmployee = maskEmployeeData(employeeData);
+
     res.status(200).json({
       success: true,
-      data: employee,
+      data: maskedEmployee,
     });
   } catch (error) {
     res.status(500).json({
@@ -298,9 +327,12 @@ exports.createEmployee = async (req, res) => {
       console.error('Failed to create audit log:', auditError);
     }
 
+    // Mask sensitive data before sending response
+    const maskedEmployee = maskEmployeeData(employee.toObject());
+
     res.status(201).json({
       success: true,
-      data: employee,
+      data: maskedEmployee,
       message: 'Employee created successfully. User account has been created for login.',
     });
   } catch (error) {
@@ -383,9 +415,12 @@ exports.updateEmployee = async (req, res) => {
       console.error('Failed to create audit log:', auditError);
     }
 
+    // Mask sensitive data before sending response
+    const maskedEmployee = maskEmployeeData(employee.toObject());
+
     res.status(200).json({
       success: true,
-      data: employee,
+      data: maskedEmployee,
     });
   } catch (error) {
     res.status(500).json({

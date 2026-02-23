@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { requireModule } = require('../middleware/modulePermission');
 const {
   getOnboardings,
   getOnboarding,
@@ -50,6 +51,7 @@ const { setTenant } = require('../middleware/tenant');
 
 router.use(protect);
 router.use(setTenant);
+router.use(requireModule('ONBOARDING')); // BRD: DM-037 - Module access protection
 
 // Onboarding routes
 router

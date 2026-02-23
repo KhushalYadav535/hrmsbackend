@@ -26,6 +26,7 @@ const {
 } = require('../controllers/managerAppraisalController');
 const {
   getNormalizations,
+  getNormalizationPreview,
   createNormalization,
   adjustRating,
   completeNormalization,
@@ -113,6 +114,7 @@ router
   .post(authorize('Manager', 'HR Administrator', 'Tenant Admin', 'Super Admin'), submitManagerAppraisal);
 
 // Normalization
+router.get('/normalizations/preview', authorize('HR Administrator', 'Tenant Admin', 'Super Admin'), getNormalizationPreview);
 router
   .route('/normalizations')
   .get(authorize('HR Administrator', 'Tenant Admin', 'Super Admin'), getNormalizations)

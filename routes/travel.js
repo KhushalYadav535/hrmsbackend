@@ -39,9 +39,11 @@ const {
 } = require('../controllers/ltaController');
 const { protect, authorize } = require('../middleware/auth');
 const { setTenant } = require('../middleware/tenant');
+const { requireModule } = require('../middleware/modulePermission');
 
 router.use(protect);
 router.use(setTenant);
+router.use(requireModule('TRAVEL')); // BRD: DM-037
 
 // Travel Request Routes
 router

@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getTenants,
   getTenant,
+  createTenant,
   updateTenant,
   getCurrentTenant,
   updateTenantSettings,
@@ -12,7 +13,9 @@ const { setTenant } = require('../middleware/tenant');
 
 router.use(protect);
 
-router.get('/', superAdminOnly, getTenants);
+router.route('/')
+  .get(superAdminOnly, getTenants)
+  .post(superAdminOnly, createTenant);
 
 // Current tenant routes (requires tenant context)
 router.get('/current', setTenant, authorize('Tenant Admin'), getCurrentTenant);

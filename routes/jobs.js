@@ -9,9 +9,11 @@ const {
 } = require('../controllers/jobController');
 const { protect, authorize } = require('../middleware/auth');
 const { setTenant } = require('../middleware/tenant');
+const { requireModule } = require('../middleware/modulePermission');
 
 router.use(protect);
 router.use(setTenant);
+router.use(requireModule('RECRUITMENT')); // BRD: DM-037 - Module access protection
 
 router
   .route('/')

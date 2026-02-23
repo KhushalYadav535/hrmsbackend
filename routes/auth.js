@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   register,
   login,
+  logout,
   getMe,
   registerTenant,
   forgotPassword,
@@ -29,6 +30,7 @@ router.post('/sso', ssoLogin);
 router.use(protect);
 router.use(setTenant);
 router.get('/me', getMe);
+router.post('/logout', logout); // BR-P0-001 Bug 1: Logout endpoint
 router.post('/change-password', changePassword);
 router.post('/unlock-account', unlockAccount);
 router.post('/setup-mfa', setupMFA);

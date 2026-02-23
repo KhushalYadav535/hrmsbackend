@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 
 /**
  * Holiday Calendar Model
- * BRD Requirement: Sandwich leave policy applies to leaves between holidays
- * Tracks holidays for sandwich leave detection
+ * BRD: BR-P1-003 - Leave Management Enhancements
  */
 const holidayCalendarSchema = new mongoose.Schema({
   tenantId: {
@@ -12,48 +11,38 @@ const holidayCalendarSchema = new mongoose.Schema({
     required: true,
     index: true,
   },
-  holidayDate: {
-    type: Date,
-    required: true,
-    comment: 'Date of the holiday',
-  },
-  holidayName: {
-    type: String,
-    required: true,
-    trim: true,
-    comment: 'Name of the holiday',
-  },
-  holidayType: {
-    type: String,
-    enum: ['National', 'Regional', 'Bank Holiday', 'Festival', 'Other'],
-    default: 'National',
-  },
-  isRecurring: {
-    type: Boolean,
-    default: false,
-    comment: 'Whether this holiday repeats annually',
-  },
-  recurringMonth: {
+  year: {
     type: Number,
-    min: 0,
-    max: 11,
-    comment: 'Month (0-11) for recurring holidays',
+    required: true,
+    index: true,
   },
-  recurringDay: {
-    type: Number,
-    min: 1,
-    max: 31,
-    comment: 'Day of month for recurring holidays',
-  },
-  applicableLocations: [{
-    type: String,
-    trim: true,
-    comment: 'Locations where this holiday applies (empty = all locations)',
+  holidays: [{
+    date: {
+      type: Date,
+      required: true,
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    type: {
+      type: String,
+      enum: ['NATIONAL', 'STATE', 'REGIONAL', 'BANK', 'OPTIONAL'],
+      default: 'NATIONAL',
+    },
+    applicableTo: {
+      type: String,
+      enum: ['ALL', 'DEPARTMENTS', 'LOCATIONS'],
+      default: 'ALL',
+    },
+    applicableDepartments: [String],
+    applicableLocations: [String],
+    isOptional: {
+      type: Boolean,
+      default: false,
+    },
   }],
-  description: {
-    type: String,
-    trim: true,
-  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -64,14 +53,12 @@ const holidayCalendarSchema = new mongoose.Schema({
   },
 });
 
-// Indexes
-holidayCalendarSchema.index({ tenantId: 1, holidayDate: 1 });
-holidayCalendarSchema.index({ tenantId: 1, holidayDate: 1, holidayType: 1 });
-holidayCalendarSchema.index({ tenantId: 1, isRecurring: 1 });
-
 holidayCalendarSchema.pre('save', function (next) {
   this.updatedAt = Date.now();
   next();
 });
+
+// Indexes
+holidayCalendarSchema.index({ tenantId: 1, year: 1 }, { unique: true });
 
 module.exports = mongoose.model('HolidayCalendar', holidayCalendarSchema);

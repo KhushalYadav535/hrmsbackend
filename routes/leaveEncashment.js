@@ -12,10 +12,11 @@ const {
 } = require('../controllers/leaveEncashmentController');
 const { protect, authorize } = require('../middleware/auth');
 const { setTenant } = require('../middleware/tenant');
+const { requireModule } = require('../middleware/modulePermission');
 
-// All routes require authentication and tenant context
 router.use(protect);
 router.use(setTenant);
+router.use(requireModule('LEAVE')); // BRD: DM-037
 
 // BRD Requirement: Leave encashment management
 router
