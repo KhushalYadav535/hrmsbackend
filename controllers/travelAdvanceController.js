@@ -129,12 +129,12 @@ exports.createTravelAdvance = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'CREATE',
+      action: 'Create',
       module: 'TRV',
       entityType: 'TravelAdvance',
       entityId: travelAdvance._id,
       description: `Created travel advance request: ₹${requestedAdvance}`,
-      changes: { created: req.body },
+      changes: JSON.stringify({ created: req.body }),
     });
 
     res.status(201).json({
@@ -214,12 +214,12 @@ exports.approveTravelAdvance = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'APPROVE',
+      action: 'Approve',
       module: 'TRV',
       entityType: 'TravelAdvance',
       entityId: advance._id,
       description: `Approved travel advance: ₹${advance.advanceAmount}`,
-      changes: { approved: true, comments },
+      changes: JSON.stringify({ approved: true, comments }),
     });
 
     res.status(200).json({
@@ -280,12 +280,12 @@ exports.rejectTravelAdvance = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'REJECT',
+      action: 'Reject',
       module: 'TRV',
       entityType: 'TravelAdvance',
       entityId: advance._id,
       description: `Rejected travel advance`,
-      changes: { rejected: true, comments },
+      changes: JSON.stringify({ rejected: true, comments }),
     });
 
     res.status(200).json({
@@ -337,7 +337,7 @@ exports.markTravelAdvancePaid = async (req, res) => {
       entityType: 'TravelAdvance',
       entityId: advance._id,
       description: `Marked travel advance as paid`,
-      changes: { paid: true, paymentReference, paymentMethod },
+      changes: JSON.stringify({ paid: true, paymentReference, paymentMethod }),
     });
 
     res.status(200).json({

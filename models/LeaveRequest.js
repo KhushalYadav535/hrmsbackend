@@ -106,6 +106,16 @@ const leaveRequestSchema = new mongoose.Schema({
     ref: 'User',
   },
   cancellationReason: String,
+  // BRD: Medical certificate reminder tracking (used by cron job)
+  medicalCertificateRequested: {
+    type: Boolean,
+    default: false,
+    comment: 'Set by cron after reminder sent for SL > 3 days without medical cert',
+  },
+  medicalCertificateUrl: {
+    type: String,
+    comment: 'Populated when employee uploads certificate',
+  },
   createdAt: {
     type: Date,
     default: Date.now,

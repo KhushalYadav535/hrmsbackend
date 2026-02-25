@@ -61,7 +61,7 @@ exports.validateAccount = asyncHandler(async (req, res) => {
       await createAuditLog({
         tenantId: req.tenantId,
         userId: req.user._id,
-        action: 'UPDATE',
+        action: 'Update',
         entityType: 'Employee',
         entityId: employee._id,
         description: `Bank account validated: ${accountNumber}`,
@@ -161,7 +161,7 @@ exports.confirmTransactionStatus = asyncHandler(async (req, res) => {
     await createAuditLog({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'UPDATE',
+      action: 'Update',
       entityType: 'BankTransaction',
       entityId: transaction._id,
       description: `Transaction status confirmed: ${result.status}`,
@@ -229,7 +229,7 @@ exports.bulkConfirmTransactionStatus = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'BankTransaction',
     description: `Bulk transaction status confirmed: ${result.successful} successful, ${result.failed} failed`,
   });
@@ -298,7 +298,7 @@ exports.retryFailedTransaction = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'BankTransaction',
     entityId: transaction._id,
     description: `Retry failed transaction: ${transaction.transactionReference}`,

@@ -104,7 +104,7 @@ exports.createHRADeclaration = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     entityType: 'HRADeclaration',
     entityId: hraDeclaration._id,
     description: `HRA declaration submitted for FY ${currentFY}`,
@@ -187,7 +187,7 @@ exports.verifyHRADeclaration = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'HRADeclaration',
     entityId: hraDeclaration._id,
     description: `HRA declaration ${status.toLowerCase()}`,

@@ -71,7 +71,7 @@ exports.createUser = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     module: 'UAM',
     entityType: 'User',
     entityId: user._id,
@@ -396,7 +396,7 @@ exports.deleteUser = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'DELETE',
+    action: 'Delete',
     module: 'UAM',
     entityType: 'User',
     entityId: req.params.id,

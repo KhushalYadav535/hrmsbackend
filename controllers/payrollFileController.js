@@ -214,7 +214,7 @@ exports.generateBankFile = async (req, res) => {
     await createAuditLog({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'CREATE',
+      action: 'Create',
       entityType: 'BankFile',
       description: `Bank file generated: ${format} for ${month} ${year}, ${payrolls.length} transactions`,
     });

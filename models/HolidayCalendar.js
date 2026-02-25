@@ -53,9 +53,8 @@ const holidayCalendarSchema = new mongoose.Schema({
   },
 });
 
-holidayCalendarSchema.pre('save', function (next) {
+holidayCalendarSchema.pre('save', function () {
   this.updatedAt = Date.now();
-  next();
 });
 
 // Indexes

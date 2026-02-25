@@ -55,7 +55,7 @@ exports.createProbation = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     entityType: 'Probation',
     entityId: probation._id,
     description: `Probation created for employee ${employee.firstName} ${employee.lastName}`,

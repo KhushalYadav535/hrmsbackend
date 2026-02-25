@@ -106,7 +106,7 @@ exports.createOnboarding = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     module: 'Onboarding',
     entityType: 'Onboarding',
     entityId: onboarding._id,
@@ -286,7 +286,7 @@ exports.deleteOnboarding = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'DELETE',
+    action: 'Delete',
     module: 'Onboarding',
     entityType: 'Onboarding',
     entityId: req.params.id,

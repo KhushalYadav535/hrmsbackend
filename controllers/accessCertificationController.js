@@ -81,7 +81,7 @@ exports.createCertificationCampaign = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     module: 'UAM',
     entityType: 'AccessCertification',
     entityId: campaign._id,
@@ -135,7 +135,7 @@ exports.certifyUserAccess = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     module: 'UAM',
     entityType: 'AccessCertification',
     entityId: campaign._id,
@@ -180,7 +180,7 @@ exports.bulkCertify = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     module: 'UAM',
     entityType: 'AccessCertification',
     description: 'Bulk certification completed',

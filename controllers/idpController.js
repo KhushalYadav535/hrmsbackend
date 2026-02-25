@@ -80,12 +80,12 @@ exports.createIDP = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     module: 'AMS',
     entityType: 'IDP',
     entityId: idp._id,
     description: `Created IDP for employee`,
-    changes: { created: req.body },
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({
@@ -123,7 +123,7 @@ exports.finalizeIDP = asyncHandler(async (req, res) => {
     entityType: 'IDP',
     entityId: idp._id,
     description: `Finalized IDP`,
-    changes: { finalized: true },
+    changes: JSON.stringify({ finalized: true }),
   });
 
   res.status(200).json({

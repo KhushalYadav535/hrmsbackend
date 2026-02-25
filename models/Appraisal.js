@@ -241,9 +241,8 @@ const appraisalSchema = new mongoose.Schema({
   },
 });
 
-appraisalSchema.pre('save', function (next) {
+appraisalSchema.pre('save', function () {
   this.updatedAt = Date.now();
-  next();
 });
 
 // Indexes

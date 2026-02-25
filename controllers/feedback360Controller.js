@@ -60,12 +60,12 @@ exports.createFeedback360 = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     module: 'AMS',
     entityType: 'Feedback360',
     entityId: feedback360._id,
     description: `Created 360-degree feedback`,
-    changes: { created: req.body },
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({
@@ -113,7 +113,7 @@ exports.submitPeerFeedback = asyncHandler(async (req, res) => {
     entityType: 'Feedback360',
     entityId: feedback360._id,
     description: `Submitted peer feedback`,
-    changes: { peerFeedback: true },
+    changes: JSON.stringify({ peerFeedback: true }),
   });
 
   res.status(200).json({

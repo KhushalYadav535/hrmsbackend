@@ -71,9 +71,8 @@ const appraisalCycleSchema = new mongoose.Schema({
   },
 });
 
-appraisalCycleSchema.pre('save', function (next) {
+appraisalCycleSchema.pre('save', function () {
   this.updatedAt = Date.now();
-  next();
 });
 
 module.exports = mongoose.model('AppraisalCycle', appraisalCycleSchema);

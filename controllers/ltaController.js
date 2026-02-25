@@ -148,12 +148,12 @@ exports.createLTA = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'CREATE',
+      action: 'Create',
       module: 'TRV',
       entityType: 'LTA',
       entityId: lta._id,
       description: `Created LTA block ${blockYear} for employee`,
-      changes: { created: req.body },
+      changes: JSON.stringify({ created: req.body }),
     });
 
     res.status(201).json({
@@ -222,7 +222,7 @@ exports.addLTAJourney = async (req, res) => {
       entityType: 'LTA',
       entityId: lta._id,
       description: `Added LTA journey: ${origin} to ${destination}`,
-      changes: { journeyAdded: req.body },
+      changes: JSON.stringify({ journeyAdded: req.body }),
     });
 
     res.status(200).json({
@@ -270,7 +270,7 @@ exports.approveLTAJourney = async (req, res) => {
       entityType: 'LTA',
       entityId: lta._id,
       description: `Approved LTA journey`,
-      changes: { journeyIndex },
+      changes: JSON.stringify({ journeyIndex }),
     });
 
     res.status(200).json({

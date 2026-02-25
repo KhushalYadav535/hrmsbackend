@@ -93,12 +93,12 @@ exports.createPIP = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     module: 'AMS',
     entityType: 'PIP',
     entityId: pip._id,
     description: `Created PIP for employee`,
-    changes: { created: req.body },
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({
@@ -147,12 +147,12 @@ exports.approvePIP = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'APPROVE',
+    action: 'Approve',
     module: 'AMS',
     entityType: 'PIP',
     entityId: pip._id,
     description: `Approved PIP`,
-    changes: { approved: true },
+    changes: JSON.stringify({ approved: true }),
   });
 
   res.status(200).json({
@@ -207,7 +207,7 @@ exports.acknowledgePIP = asyncHandler(async (req, res) => {
     entityType: 'PIP',
     entityId: pip._id,
     description: `Employee acknowledged PIP`,
-    changes: { acknowledged: true, comments },
+    changes: JSON.stringify({ acknowledged: true, comments }),
   });
 
   res.status(200).json({

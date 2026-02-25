@@ -64,12 +64,14 @@ exports.createAppraisalCycle = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    userName: req.user.userName || 'System',
+    details: `Created appraisal cycle: ${cycle.cycleName}`,
+    action: 'Create',
     module: 'AMS',
     entityType: 'AppraisalCycle',
     entityId: cycle._id,
     description: `Created appraisal cycle: ${cycle.cycleName}`,
-    changes: { created: req.body },
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({
@@ -101,12 +103,14 @@ exports.updateAppraisalCycle = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    userName: req.user.userName || 'System',
+    details: `Updated appraisal cycle: ${cycle.cycleName}`,
+    action: 'Update',
     module: 'AMS',
     entityType: 'AppraisalCycle',
     entityId: cycle._id,
     description: `Updated appraisal cycle: ${cycle.cycleName}`,
-    changes: { updated: req.body },
+    changes: JSON.stringify({ updated: req.body }),
   });
 
   res.status(200).json({
@@ -148,12 +152,14 @@ exports.activateCycle = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'ACTIVATE',
+    userName: req.user.userName || 'System',
+    details: `Activated appraisal cycle: ${cycle.cycleName}`,
+    action: 'Update',
     module: 'AMS',
     entityType: 'AppraisalCycle',
     entityId: cycle._id,
     description: `Activated appraisal cycle: ${cycle.cycleName}`,
-    changes: { activated: true },
+    changes: JSON.stringify({ activated: true }),
   });
 
   res.status(200).json({

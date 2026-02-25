@@ -229,7 +229,7 @@ exports.calculateMonthlyTDS = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'TaxComputation',
     entityId: computation._id,
     description: `Monthly TDS calculated for ${month} ${year}`,

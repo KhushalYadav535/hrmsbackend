@@ -121,9 +121,8 @@ const normalizationSchema = new mongoose.Schema({
 normalizationSchema.index({ tenantId: 1, appraisalCycleId: 1, departmentId: 1 });
 normalizationSchema.index({ tenantId: 1, appraisalCycleId: 1, status: 1 });
 
-normalizationSchema.pre('save', function (next) {
+normalizationSchema.pre('save', function () {
   this.updatedAt = Date.now();
-  next();
 });
 
 module.exports = mongoose.model('Normalization', normalizationSchema);

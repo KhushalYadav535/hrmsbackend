@@ -118,7 +118,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['Pending Activation', 'Active', 'Inactive', 'Locked', 'Suspended', 'Deactivated'],
     default: 'Pending Activation',
-    set: function(value) {
+    set: function (value) {
       // Normalize status value (handle lowercase 'active' from old data)
       if (value && typeof value === 'string') {
         const statusLower = value.toLowerCase();
@@ -168,6 +168,16 @@ const userSchema = new mongoose.Schema({
     type: String,
     comment: 'Current session ID for concurrent session detection',
   },
+  // BRD: Session management — track all active sessions across devices
+  activeSessions: [
+    {
+      sessionId: { type: String, required: true },
+      ipAddress: { type: String },
+      userAgent: { type: String },
+      loginAt: { type: Date, default: Date.now },
+      lastActivity: { type: Date, default: Date.now },
+    },
+  ],
   createdAt: {
     type: Date,
     default: Date.now,
@@ -194,7 +204,7 @@ userSchema.pre('save', async function (next) {
   // BRD Requirement: Password policy validation
   const password = this.password;
   const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
-  
+
   if (!passwordRegex.test(password)) {
     const error = new Error('Password must be at least 12 characters with uppercase, lowercase, digit, and special character');
     if (typeof next === 'function') {
@@ -237,12 +247,12 @@ userSchema.pre('save', async function (next) {
   // Hash the new password
   const salt = await bcrypt.genSalt(10);
   this.password = await bcrypt.hash(this.password, salt);
-  
+
   // BRD Requirement: Set password expiry (90 days from now)
   this.passwordExpiryDate = new Date();
   this.passwordExpiryDate.setDate(this.passwordExpiryDate.getDate() + 90);
   this.lastPasswordChangeDate = new Date();
-  
+
   this.updatedAt = Date.now();
   if (typeof next === 'function') {
     next();

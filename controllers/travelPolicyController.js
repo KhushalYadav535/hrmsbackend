@@ -65,12 +65,12 @@ exports.createTravelPolicy = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'CREATE',
+      action: 'Create',
       module: 'TRV',
       entityType: 'TravelPolicy',
       entityId: policy._id,
       description: `Created travel policy for grade ${grade}`,
-      changes: { created: req.body },
+      changes: JSON.stringify({ created: req.body }),
     });
 
     res.status(201).json({
@@ -110,12 +110,12 @@ exports.updateTravelPolicy = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'UPDATE',
+      action: 'Update',
       module: 'TRV',
       entityType: 'TravelPolicy',
       entityId: policy._id,
       description: `Updated travel policy for grade ${policy.grade}`,
-      changes: { updated: req.body },
+      changes: JSON.stringify({ updated: req.body }),
     });
 
     res.status(200).json({
@@ -154,12 +154,12 @@ exports.deleteTravelPolicy = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'DELETE',
+      action: 'Delete',
       module: 'TRV',
       entityType: 'TravelPolicy',
       entityId: req.params.id,
       description: `Deleted travel policy for grade ${policy.grade}`,
-      changes: { deleted: policy.toObject() },
+      changes: JSON.stringify({ deleted: policy.toObject() }),
     });
 
     res.status(200).json({

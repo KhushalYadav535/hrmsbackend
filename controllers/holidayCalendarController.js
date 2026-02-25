@@ -7,40 +7,20 @@ const { asyncHandler } = require('../middleware/errorHandler');
  * BRD Requirement: Holiday calendar for sandwich leave detection
  */
 exports.getHolidays = asyncHandler(async (req, res) => {
-  const { year, month, holidayType, location } = req.query;
+  const { year } = req.query;
 
   const query = {
     tenantId: req.tenantId,
   };
 
   if (year) {
-    const yearStart = new Date(parseInt(year), 0, 1);
-    const yearEnd = new Date(parseInt(year), 11, 31, 23, 59, 59);
-    query.holidayDate = { $gte: yearStart, $lte: yearEnd };
+    query.year = parseInt(year);
   }
 
-  if (month !== undefined) {
-    const monthStart = new Date(parseInt(year || new Date().getFullYear()), parseInt(month), 1);
-    const monthEnd = new Date(parseInt(year || new Date().getFullYear()), parseInt(month) + 1, 0, 23, 59, 59);
-    query.holidayDate = { $gte: monthStart, $lte: monthEnd };
-  }
-
-  if (holidayType) {
-    query.holidayType = holidayType;
-  }
-
-  if (location) {
-    query.$or = [
-      { applicableLocations: { $size: 0 } }, // All locations
-      { applicableLocations: location },
-    ];
-  }
-
-  const holidays = await HolidayCalendar.find(query).sort({ holidayDate: 1 });
+  const holidays = await HolidayCalendar.find(query).sort({ year: -1 });
 
   res.status(200).json({
     success: true,
-    count: holidays.length,
     data: holidays,
   });
 });
@@ -68,34 +48,60 @@ exports.getHoliday = asyncHandler(async (req, res) => {
 });
 
 /**
- * Create a holiday
+ * Create a holiday or holiday calendar
  */
 exports.createHoliday = asyncHandler(async (req, res) => {
-  const { holidayDate, holidayName, holidayType, isRecurring, applicableLocations } = req.body;
+  const { year, holidays } = req.body;
 
-  if (!holidayDate || !holidayName) {
+  // Validate required fields
+  if (!year) {
     return res.status(400).json({
       success: false,
-      message: 'Holiday date and name are required',
+      message: 'Year is required',
     });
   }
 
+  if (!holidays || !Array.isArray(holidays) || holidays.length === 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'At least one holiday is required',
+    });
+  }
+
+  // Validate each holiday in the array
+  for (const holiday of holidays) {
+    if (!holiday.date || !holiday.name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Each holiday must have a date and name',
+      });
+    }
+  }
+
+  // Convert holiday dates to Date objects
+  const processedHolidays = holidays.map(h => ({
+    ...h,
+    date: new Date(h.date),
+  }));
+
   const holiday = await HolidayCalendar.create({
-    ...req.body,
     tenantId: req.tenantId,
-    holidayDate: new Date(holidayDate),
+    year: parseInt(year),
+    holidays: processedHolidays,
   });
 
   // Audit log
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    userName: req.user.name || req.user.email,
+    userEmail: req.user.email,
+    action: 'Create',
     module: 'LMS',
     entityType: 'HolidayCalendar',
     entityId: holiday._id,
-    description: `Created holiday: ${holidayName} on ${holidayDate}`,
-    changes: { created: req.body },
+    details: `Created holiday calendar for year ${year} with ${holidays.length} holidays`,
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({
@@ -105,9 +111,11 @@ exports.createHoliday = asyncHandler(async (req, res) => {
 });
 
 /**
- * Update a holiday
+ * Update a holiday calendar
  */
 exports.updateHoliday = asyncHandler(async (req, res) => {
+  const { holidays } = req.body;
+
   const holiday = await HolidayCalendar.findOne({
     _id: req.params.id,
     tenantId: req.tenantId,
@@ -116,29 +124,40 @@ exports.updateHoliday = asyncHandler(async (req, res) => {
   if (!holiday) {
     return res.status(404).json({
       success: false,
-      message: 'Holiday not found',
+      message: 'Holiday calendar not found',
     });
   }
 
   const oldData = { ...holiday.toObject() };
 
-  if (req.body.holidayDate) {
-    req.body.holidayDate = new Date(req.body.holidayDate);
+  // Process and update holidays if provided
+  if (holidays && Array.isArray(holidays)) {
+    const processedHolidays = holidays.map(h => ({
+      ...h,
+      date: typeof h.date === 'string' ? new Date(h.date) : h.date,
+    }));
+    holiday.holidays = processedHolidays;
   }
 
-  Object.assign(holiday, req.body);
+  // Update other fields if provided
+  if (req.body.year) {
+    holiday.year = parseInt(req.body.year);
+  }
+
   await holiday.save();
 
   // Audit log
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    userName: req.user.name || req.user.email,
+    userEmail: req.user.email,
+    action: 'Update',
     module: 'LMS',
     entityType: 'HolidayCalendar',
     entityId: holiday._id,
-    description: `Updated holiday: ${holiday.holidayName}`,
-    changes: { old: oldData, new: req.body },
+    details: `Updated holiday calendar for year ${holiday.year}`,
+    changes: JSON.stringify({ old: oldData, new: holiday.toObject() }),
   });
 
   res.status(200).json({
@@ -148,7 +167,7 @@ exports.updateHoliday = asyncHandler(async (req, res) => {
 });
 
 /**
- * Delete a holiday
+ * Delete a holiday calendar
  */
 exports.deleteHoliday = asyncHandler(async (req, res) => {
   const holiday = await HolidayCalendar.findOne({
@@ -159,27 +178,30 @@ exports.deleteHoliday = asyncHandler(async (req, res) => {
   if (!holiday) {
     return res.status(404).json({
       success: false,
-      message: 'Holiday not found',
+      message: 'Holiday calendar not found',
     });
   }
 
+  const deletedData = holiday.toObject();
   await holiday.deleteOne();
 
   // Audit log
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'DELETE',
+    userName: req.user.name || req.user.email,
+    userEmail: req.user.email,
+    action: 'Delete',
     module: 'LMS',
     entityType: 'HolidayCalendar',
     entityId: req.params.id,
-    description: `Deleted holiday: ${holiday.holidayName}`,
-    changes: { deleted: holiday.toObject() },
+    details: `Deleted holiday calendar for year ${holiday.year}`,
+    changes: JSON.stringify({ deleted: deletedData }),
   });
 
   res.status(200).json({
     success: true,
-    message: 'Holiday deleted successfully',
+    message: 'Holiday calendar deleted successfully',
   });
 });
 
@@ -203,21 +225,40 @@ exports.checkHoliday = asyncHandler(async (req, res) => {
 
   const query = {
     tenantId: req.tenantId,
-    holidayDate: { $gte: checkDate, $lt: nextDate },
+    'holidays.date': { $gte: checkDate, $lt: nextDate },
   };
 
+  // If location is specified, filter by applicable locations
   if (location) {
     query.$or = [
-      { applicableLocations: { $size: 0 } },
-      { applicableLocations: location },
+      { 'holidays.applicableLocations': { $size: 0 } },
+      { 'holidays.applicableLocations': location },
     ];
   }
 
-  const holiday = await HolidayCalendar.findOne(query);
+  const holidayCalendar = await HolidayCalendar.findOne(query);
+  let isHoliday = false;
+  let holidayData = null;
+
+  if (holidayCalendar) {
+    const foundHoliday = holidayCalendar.holidays.find(h => {
+      const hDate = new Date(h.date);
+      hDate.setHours(0, 0, 0, 0);
+      const match = hDate.getTime() === checkDate.getTime();
+      if (location && match) {
+        return h.applicableLocations.length === 0 || h.applicableLocations.includes(location);
+      }
+      return match;
+    });
+    if (foundHoliday) {
+      isHoliday = true;
+      holidayData = foundHoliday;
+    }
+  }
 
   res.status(200).json({
     success: true,
-    isHoliday: !!holiday,
-    data: holiday,
+    isHoliday,
+    data: holidayData,
   });
 });

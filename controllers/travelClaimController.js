@@ -151,12 +151,12 @@ exports.createTravelClaim = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'CREATE',
+      action: 'Create',
       module: 'TRV',
       entityType: 'TravelClaim',
       entityId: travelClaim._id,
       description: `Created travel claim: ₹${travelClaim.totalClaimAmount}`,
-      changes: { created: req.body },
+      changes: JSON.stringify({ created: req.body }),
     });
 
     res.status(201).json({
@@ -219,7 +219,7 @@ exports.submitTravelClaim = async (req, res) => {
       entityType: 'TravelClaim',
       entityId: claim._id,
       description: `Submitted travel claim for approval`,
-      changes: { submitted: true },
+      changes: JSON.stringify({ submitted: true }),
     });
 
     res.status(200).json({
@@ -341,7 +341,7 @@ exports.approveTravelClaim = async (req, res) => {
       entityType: 'TravelClaim',
       entityId: claim._id,
       description: `Approved travel claim at ${level} level`,
-      changes: { level, comments, approvedAmount },
+      changes: JSON.stringify({ level, comments, approvedAmount }),
     });
 
     res.status(200).json({
@@ -409,12 +409,12 @@ exports.rejectTravelClaim = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'REJECT',
+      action: 'Reject',
       module: 'TRV',
       entityType: 'TravelClaim',
       entityId: claim._id,
       description: `Rejected travel claim`,
-      changes: { rejected: true, comments },
+      changes: JSON.stringify({ rejected: true, comments }),
     });
 
     res.status(200).json({
@@ -492,7 +492,7 @@ exports.settleTravelClaim = async (req, res) => {
       entityType: 'TravelClaim',
       entityId: claim._id,
       description: `Settled travel claim`,
-      changes: { settled: true, paymentReference },
+      changes: JSON.stringify({ settled: true, paymentReference }),
     });
 
     res.status(200).json({

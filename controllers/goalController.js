@@ -92,7 +92,7 @@ exports.createGoal = asyncHandler(async (req, res) => {
     entityType: 'Goal',
     entityId: goal._id,
     description: `Created goal: ${goal.description}`,
-    changes: { created: req.body },
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({
@@ -131,12 +131,12 @@ exports.updateGoal = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     module: 'AMS',
     entityType: 'Goal',
     entityId: goal._id,
     description: `Updated goal: ${goal.description}`,
-    changes: { updated: req.body },
+    changes: JSON.stringify({ updated: req.body }),
   });
 
   res.status(200).json({
@@ -174,12 +174,12 @@ exports.approveGoal = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'APPROVE',
+    action: 'Approve',
     module: 'AMS',
     entityType: 'Goal',
     entityId: goal._id,
     description: `Approved goal: ${goal.description}`,
-    changes: { approved: true, comments },
+    changes: JSON.stringify({ approved: true, comments }),
   });
 
   res.status(200).json({
@@ -220,7 +220,7 @@ exports.updateGoalProgress = asyncHandler(async (req, res) => {
     entityType: 'Goal',
     entityId: goal._id,
     description: `Updated goal progress: ${progress}%`,
-    changes: { progress, currentValue },
+    changes: JSON.stringify({ progress, currentValue }),
   });
 
   res.status(200).json({

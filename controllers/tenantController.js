@@ -1,31 +1,58 @@
 const Tenant = require('../models/Tenant');
+const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
 
-// @desc    Create tenant (Super Admin only)
+// @desc    Create tenant (Super Admin only) - same as register-tenant: creates tenant + Tenant Admin user
 // @route   POST /api/tenants
 // @access  Private (Super Admin)
 exports.createTenant = async (req, res) => {
   try {
-    const { name, code, location } = req.body;
+    const { name, code, location, adminEmail, adminPassword, adminName } = req.body;
     if (!name || !code) {
       return res.status(400).json({
         success: false,
         message: 'Name and code are required',
       });
     }
+    if (!adminEmail || !adminPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin email and password are required',
+      });
+    }
     const codeUpper = code.toUpperCase().trim();
-    const existing = await Tenant.findOne({ code: codeUpper });
-    if (existing) {
+    const existingTenant = await Tenant.findOne({ code: codeUpper });
+    if (existingTenant) {
       return res.status(400).json({
         success: false,
         message: 'Tenant with this code already exists',
       });
     }
+    // Check if admin email already exists
+    const existingUser = await User.findOne({ email: adminEmail.toLowerCase().trim() });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists',
+      });
+    }
+
     const tenant = await Tenant.create({
       name: name.trim(),
       code: codeUpper,
       location: location || '',
     });
+
+    // Create Tenant Admin user (same as register-tenant flow)
+    const adminUser = await User.create({
+      email: adminEmail.toLowerCase().trim(),
+      password: adminPassword,
+      name: adminName || 'Tenant Administrator',
+      tenantId: tenant._id,
+      role: 'Tenant Admin',
+      status: 'Active',
+    });
+
     res.status(201).json({
       success: true,
       data: {
@@ -35,13 +62,25 @@ exports.createTenant = async (req, res) => {
         location: tenant.location,
         status: tenant.status,
         employees: tenant.employees,
+        adminUserId: adminUser._id.toString(),
+        adminEmail: adminUser.email,
       },
-      message: 'Tenant created successfully',
+      message: 'Tenant created successfully. Admin user has been created.',
     });
   } catch (error) {
+    // Map known validation errors to 400 so UI can show proper message
+    if (error && (error.name === 'ValidationError' || typeof error.message === 'string')) {
+      const msg = error.message || 'Validation error';
+      return res.status(400).json({
+        success: false,
+        message: msg,
+        error: msg,
+      });
+    }
+
     res.status(500).json({
       success: false,
-      message: error.message,
+      message: 'Server error',
       error: error.message,
     });
   }
@@ -54,17 +93,30 @@ exports.getTenants = async (req, res) => {
   try {
     const tenants = await Tenant.find().sort({ createdAt: -1 });
 
+    // Fetch admin users for each tenant
+    const tenantIds = tenants.map(t => t._id);
+    const adminUsers = await User.find({ tenantId: { $in: tenantIds }, role: 'Tenant Admin' });
+    const adminMap = {};
+    adminUsers.forEach(u => {
+      adminMap[u.tenantId.toString()] = u;
+    });
+
     res.status(200).json({
       success: true,
       count: tenants.length,
-      data: tenants.map(t => ({
-        id: t._id.toString(),
-        name: t.name,
-        code: t.code,
-        location: t.location,
-        employees: t.employees,
-        status: t.status,
-      })),
+      data: tenants.map(t => {
+        const admin = adminMap[t._id.toString()];
+        return {
+          id: t._id.toString(),
+          name: t.name,
+          code: t.code,
+          location: t.location,
+          employees: t.employees,
+          status: t.status,
+          adminEmail: admin ? admin.email : '',
+          adminName: admin ? admin.name : '',
+        };
+      }),
     });
   } catch (error) {
     res.status(500).json({
@@ -174,7 +226,7 @@ exports.updateTenant = async (req, res) => {
       });
     }
 
-    const { name, location, status, settings } = req.body;
+    const { name, location, status, settings, adminEmail, adminName } = req.body;
 
     if (name) tenant.name = name;
     if (location) tenant.location = location;
@@ -191,12 +243,37 @@ exports.updateTenant = async (req, res) => {
 
     await tenant.save();
 
+    // Update Tenant Admin user if adminEmail or adminName provided (Super Admin only)
+    if (req.user.role === 'Super Admin' && (adminEmail || adminName)) {
+      const adminUser = await User.findOne({ tenantId: tenant._id, role: 'Tenant Admin' });
+      if (adminUser) {
+        if (adminName) adminUser.name = adminName;
+        if (adminEmail) {
+          const emailLower = adminEmail.toLowerCase().trim();
+          // Check email uniqueness only if it changed
+          if (emailLower !== adminUser.email) {
+            const existing = await User.findOne({ email: emailLower });
+            if (existing) {
+              return res.status(400).json({
+                success: false,
+                message: 'A user with this email already exists',
+              });
+            }
+            adminUser.email = emailLower;
+          }
+        }
+        await adminUser.save();
+      }
+    }
+
     // Create audit log
     try {
       const changes = [];
-      if (name && name !== tenant.name) changes.push(`Name: ${tenant.name}`);
-      if (location && location !== tenant.location) changes.push(`Location: ${tenant.location}`);
-      if (status && status !== tenant.status) changes.push(`Status: ${tenant.status}`);
+      if (name) changes.push(`Name: ${name}`);
+      if (location) changes.push(`Location: ${location}`);
+      if (status) changes.push(`Status: ${status}`);
+      if (adminEmail) changes.push(`Admin Email updated`);
+      if (adminName) changes.push(`Admin Name updated`);
       if (settings) changes.push('Settings updated');
 
       await AuditLog.create({

@@ -17,6 +17,65 @@ const leavePolicySchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  // BRD: Grade-wise leave quotas — different limits for officers/clerks/sub-staff
+  gradeWiseQuotas: [
+    {
+      grade: { type: String, required: true }, // e.g., 'Officer', 'Clerk', 'Sub-Staff', 'JMG Scale I', etc.
+      daysPerYear: { type: Number, required: true, min: 0 },
+      maxAccrual: { type: Number, default: 0 }, // 0 = no limit
+      maxCarryForward: { type: Number, default: 0 },
+    },
+  ],
+  // BRD: Maximum accrual cap (total leave balance cannot exceed this)
+  maxAccrualLimit: {
+    type: Number,
+    default: 0,
+    comment: '0 = no limit. Total balance cap across all accruals.',
+  },
+  // BRD: Medical certificate required for SL > N days
+  requiresMedicalCertificate: {
+    type: Boolean,
+    default: false,
+  },
+  medicalCertificateAfterDays: {
+    type: Number,
+    default: 3,
+    comment: 'Medical certificate required if sick leave > this many days',
+  },
+  // BRD: Minimum notice period before applying (0 = no restriction)
+  minNoticeDays: {
+    type: Number,
+    default: 0,
+  },
+  // BRD: Minimum and maximum duration per single application
+  minLeaveDuration: {
+    type: Number,
+    default: 0.5, // half day
+  },
+  maxLeaveDuration: {
+    type: Number,
+    default: 0, // 0 = no limit
+  },
+  // BRD: Allow half-day leaves
+  allowHalfDay: {
+    type: Boolean,
+    default: false,
+  },
+  // BRD: Probation restriction
+  restrictedDuringProbation: {
+    type: Boolean,
+    default: false,
+  },
+  // BRD: Flexi-holiday (employee can choose from a list of optional holidays)
+  isFlexiHoliday: {
+    type: Boolean,
+    default: false,
+  },
+  flexiHolidayLimit: {
+    type: Number,
+    default: 0,
+    comment: 'Max number of optional holidays employee can choose in a year',
+  },
   accrualFrequency: {
     type: String,
     enum: ['Monthly', 'Quarterly', 'Yearly', 'None'],

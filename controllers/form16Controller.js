@@ -162,7 +162,7 @@ exports.generateForm16 = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     entityType: 'Form16',
     entityId: form16._id,
     description: `Form 16 generated for FY ${currentFY}`,

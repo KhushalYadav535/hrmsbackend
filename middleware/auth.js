@@ -70,8 +70,10 @@ exports.protect = async (req, res, next) => {
       req.user.lastActivityAt = new Date();
       await req.user.save({ validateBeforeSave: false }); // Save without validation to avoid password issues
 
-      // Set tenantId from user
-      req.tenantId = req.user.tenantId._id || req.user.tenantId;
+      // Set tenantId from user (Super Admin may have null tenantId)
+      req.tenantId = req.user.tenantId
+        ? (req.user.tenantId._id || req.user.tenantId)
+        : null;
 
       next();
     } catch (err) {

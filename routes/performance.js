@@ -26,19 +26,7 @@ router.use(protect);
 router.use(setTenant);
 router.use(requireModule('PERFORMANCE')); // BRD: DM-037 - Module access protection
 
-// Legacy routes (backward compatibility)
-router
-  .route('/')
-  .get(getPerformances)
-  .post(authorize('Manager', 'HR Administrator', 'Tenant Admin'), createPerformance);
-
-router
-  .route('/:id')
-  .get(getPerformance)
-  .put(authorize('Manager', 'HR Administrator', 'Tenant Admin'), updatePerformance)
-  .delete(authorize('HR Administrator', 'Tenant Admin'), deletePerformance);
-
-// New Appraisal Workflow Routes (BR-P1-001)
+// New Appraisal Workflow Routes (BR-P1-001) - MUST be defined BEFORE /:id route
 router.get('/cycles', getCycles);
 router.post('/cycles', authorize('HR Administrator', 'Tenant Admin', 'Super Admin'), createCycle);
 router.patch('/cycles/:id/activate', authorize('HR Administrator', 'Tenant Admin', 'Super Admin'), activateCycle);
@@ -51,5 +39,17 @@ router.post('/:id/manager-review', authorize('Manager', 'HR Administrator', 'Ten
 
 router.post('/normalize', authorize('HR Administrator', 'Tenant Admin', 'Super Admin'), normalizeRatings);
 router.get('/admin/all', authorize('HR Administrator', 'Tenant Admin', 'Super Admin'), getAllAppraisals);
+
+// Legacy routes (backward compatibility) - MUST be defined AFTER specific routes
+router
+  .route('/')
+  .get(getPerformances)
+  .post(authorize('Manager', 'HR Administrator', 'Tenant Admin'), createPerformance);
+
+router
+  .route('/:id')
+  .get(getPerformance)
+  .put(authorize('Manager', 'HR Administrator', 'Tenant Admin'), updatePerformance)
+  .delete(authorize('HR Administrator', 'Tenant Admin'), deletePerformance);
 
 module.exports = router;

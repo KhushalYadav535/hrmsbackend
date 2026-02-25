@@ -183,12 +183,12 @@ exports.createTravelRequest = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'CREATE',
+      action: 'Create',
       module: 'TRV',
       entityType: 'TravelRequest',
       entityId: travelRequest._id,
       description: `Created travel request: ${travelType} from ${origin} to ${destination}`,
-      changes: { created: req.body },
+      changes: JSON.stringify({ created: req.body }),
     });
 
     res.status(201).json({
@@ -237,12 +237,12 @@ exports.updateTravelRequest = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'UPDATE',
+      action: 'Update',
       module: 'TRV',
       entityType: 'TravelRequest',
       entityId: travelRequest._id,
       description: `Updated travel request`,
-      changes: { updated: req.body },
+      changes: JSON.stringify({ updated: req.body }),
     });
 
     res.status(200).json({
@@ -304,7 +304,7 @@ exports.submitTravelRequest = async (req, res) => {
       entityType: 'TravelRequest',
       entityId: travelRequest._id,
       description: `Submitted travel request for approval`,
-      changes: { submitted: true },
+      changes: JSON.stringify({ submitted: true }),
     });
 
     res.status(200).json({
@@ -397,7 +397,7 @@ exports.approveTravelRequest = async (req, res) => {
       entityType: 'TravelRequest',
       entityId: travelRequest._id,
       description: `${status} travel request`,
-      changes: { status, comments },
+      changes: JSON.stringify({ status, comments }),
     });
 
     res.status(200).json({
@@ -445,12 +445,12 @@ exports.deleteTravelRequest = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'DELETE',
+      action: 'Delete',
       module: 'TRV',
       entityType: 'TravelRequest',
       entityId: req.params.id,
       description: `Deleted travel request`,
-      changes: { deleted: travelRequest.toObject() },
+      changes: JSON.stringify({ deleted: travelRequest.toObject() }),
     });
 
     res.status(200).json({

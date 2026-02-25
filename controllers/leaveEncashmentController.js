@@ -133,7 +133,7 @@ exports.createLeaveEncashment = asyncHandler(async (req, res) => {
     entityType: 'LeaveEncashment',
     entityId: encashment._id,
     description: `Created leave encashment request: ${days} days of ${leaveType} for ${employee.employeeCode}`,
-    changes: { created: req.body },
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({
@@ -185,12 +185,12 @@ exports.approveLeaveEncashment = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'APPROVE',
+    action: 'Approve',
     module: 'LMS',
     entityType: 'LeaveEncashment',
     entityId: encashment._id,
     description: `Approved leave encashment: ${encashment.days} days`,
-    changes: { approved: true },
+    changes: JSON.stringify({ approved: true }),
   });
 
   res.status(200).json({
@@ -239,7 +239,7 @@ exports.processLeaveEncashment = asyncHandler(async (req, res) => {
     entityType: 'LeaveEncashment',
     entityId: encashment._id,
     description: `Processed leave encashment payment: ₹${encashment.encashmentAmount}`,
-    changes: { processed: true },
+    changes: JSON.stringify({ processed: true }),
   });
 
   res.status(200).json({
@@ -275,12 +275,12 @@ exports.rejectLeaveEncashment = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'REJECT',
+    action: 'Reject',
     module: 'LMS',
     entityType: 'LeaveEncashment',
     entityId: encashment._id,
     description: `Rejected leave encashment request`,
-    changes: { rejected: true, remarks: req.body.remarks },
+    changes: JSON.stringify({ rejected: true, remarks: req.body.remarks }),
   });
 
   res.status(200).json({
@@ -331,7 +331,7 @@ exports.updateLeaveEncashment = asyncHandler(async (req, res) => {
     entityType: 'LeaveEncashment',
     entityId: encashment._id,
     description: `Updated leave encashment`,
-    changes: { updated: req.body },
+    changes: JSON.stringify({ updated: req.body }),
   });
 
   res.status(200).json({
@@ -363,12 +363,12 @@ exports.deleteLeaveEncashment = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'DELETE',
+    action: 'Delete',
     module: 'LMS',
     entityType: 'LeaveEncashment',
     entityId: req.params.id,
     description: `Deleted leave encashment request`,
-    changes: { deleted: encashment.toObject() },
+    changes: JSON.stringify({ deleted: encashment.toObject() }),
   });
 
   res.status(200).json({

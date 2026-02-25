@@ -76,7 +76,7 @@ exports.createDelegation = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     module: 'UAM',
     entityType: 'Delegation',
     entityId: delegation._id,
@@ -186,7 +186,7 @@ exports.approveDelegation = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'APPROVE',
+    action: 'Approve',
     module: 'UAM',
     entityType: 'Delegation',
     entityId: delegation._id,
@@ -236,7 +236,7 @@ exports.revokeDelegation = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     module: 'UAM',
     entityType: 'Delegation',
     entityId: delegation._id,

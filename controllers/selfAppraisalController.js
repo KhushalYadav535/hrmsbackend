@@ -121,12 +121,12 @@ exports.createOrUpdateSelfAppraisal = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: selfAppraisal.status === 'Draft' ? 'UPDATE' : 'CREATE',
+    action: selfAppraisal.status === 'Draft' ? 'Update' : 'Create',
     module: 'AMS',
     entityType: 'SelfAppraisal',
     entityId: selfAppraisal._id,
     description: `Self-appraisal ${selfAppraisal.status === 'Draft' ? 'updated' : 'created'}`,
-    changes: { updated: req.body },
+    changes: JSON.stringify({ updated: req.body }),
   });
 
   res.status(selfAppraisal.status === 'Draft' ? 200 : 201).json({
@@ -193,7 +193,7 @@ exports.submitSelfAppraisal = asyncHandler(async (req, res) => {
     entityType: 'SelfAppraisal',
     entityId: selfAppraisal._id,
     description: `Submitted self-appraisal`,
-    changes: { submitted: true },
+    changes: JSON.stringify({ submitted: true }),
   });
 
   res.status(200).json({

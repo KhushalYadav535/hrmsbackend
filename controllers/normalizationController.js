@@ -214,12 +214,14 @@ exports.createNormalization = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    userName: req.user.userName || 'System',
+    details: `Created normalization for cycle`,
+    action: 'Create',
     module: 'AMS',
     entityType: 'Normalization',
     entityId: normalization._id,
     description: `Created normalization for cycle`,
-    changes: { created: req.body },
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({
@@ -293,7 +295,7 @@ exports.adjustRating = asyncHandler(async (req, res) => {
     entityType: 'Normalization',
     entityId: normalization._id,
     description: `Adjusted rating for employee`,
-    changes: { adjustment },
+    changes: JSON.stringify({ adjustment }),
   });
 
   res.status(200).json({
@@ -331,7 +333,7 @@ exports.completeNormalization = asyncHandler(async (req, res) => {
     entityType: 'Normalization',
     entityId: normalization._id,
     description: `Completed normalization`,
-    changes: { completed: true },
+    changes: JSON.stringify({ completed: true }),
   });
 
   res.status(200).json({

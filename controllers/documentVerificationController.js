@@ -63,7 +63,7 @@ exports.createDocumentVerification = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     entityType: 'DocumentVerification',
     entityId: verification._id,
     description: `Document verification created for ${onboarding.candidateName}`,
@@ -123,7 +123,7 @@ exports.verifyAadhaar = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'DocumentVerification',
     entityId: verification._id,
     description: `Aadhaar verification ${result.verified ? 'successful' : 'failed'}`,
@@ -181,7 +181,7 @@ exports.verifyPAN = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'DocumentVerification',
     entityId: verification._id,
     description: `PAN verification ${result.verified ? 'successful' : 'failed'}`,
@@ -232,7 +232,7 @@ exports.fetchDigiLockerDocuments = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'DocumentVerification',
     entityId: verification._id,
     description: 'DigiLocker documents fetched',
@@ -559,7 +559,7 @@ exports.exchangeDigiLockerCode = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'DocumentVerification',
     entityId: verification._id,
     description: `DigiLocker OAuth ${result.success ? 'completed' : 'failed'}`,

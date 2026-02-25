@@ -173,12 +173,12 @@ exports.createManagerAppraisal = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     module: 'AMS',
     entityType: 'ManagerAppraisal',
     entityId: managerAppraisal._id,
     description: `Created manager appraisal for employee`,
-    changes: { created: req.body },
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({
@@ -238,7 +238,7 @@ exports.submitManagerAppraisal = asyncHandler(async (req, res) => {
     entityType: 'ManagerAppraisal',
     entityId: managerAppraisal._id,
     description: `Submitted manager appraisal`,
-    changes: { submitted: true },
+    changes: JSON.stringify({ submitted: true }),
   });
 
   res.status(200).json({

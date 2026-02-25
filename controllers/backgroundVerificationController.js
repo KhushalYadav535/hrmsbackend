@@ -56,7 +56,7 @@ exports.initiateBackgroundVerification = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     entityType: 'BackgroundVerification',
     entityId: verification._id,
     description: `Background verification initiated for ${onboarding.candidateName}`,
@@ -117,7 +117,7 @@ exports.updateVerificationComponent = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'BackgroundVerification',
     entityId: verification._id,
     description: `${component} verification updated: ${status}`,
@@ -233,7 +233,7 @@ exports.approveBackgroundVerification = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'UPDATE',
+    action: 'Update',
     entityType: 'BackgroundVerification',
     entityId: verification._id,
     description: `Background verification ${approvalStatus.toLowerCase()}`,

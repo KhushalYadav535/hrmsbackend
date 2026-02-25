@@ -70,12 +70,12 @@ exports.createFeedback = asyncHandler(async (req, res) => {
   await AuditLog.create({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     module: 'AMS',
     entityType: 'Feedback',
     entityId: feedbackDoc._id,
     description: `Created feedback`,
-    changes: { created: req.body },
+    changes: JSON.stringify({ created: req.body }),
   });
 
   res.status(201).json({

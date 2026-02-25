@@ -4,6 +4,7 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const connectDB = require('./config/database');
 const errorHandler = require('./middleware/errorHandler');
+const { requestLogger, ipRateLimit } = require('./middleware/ipWhitelist');
 
 // Load env vars
 dotenv.config();
@@ -11,17 +12,28 @@ dotenv.config();
 // Connect to database
 connectDB();
 
+// Initialize cron jobs after DB connects
+const { initScheduledJobs } = require('./utils/cronJobs');
+// Initialize Bull payroll worker
+const { registerWorker } = require('./services/payrollQueueService');
+setTimeout(() => {
+  initScheduledJobs();
+  registerWorker(); // Register async payroll job processor
+}, 5000); // 5s delay to let DB connect first
+
 const app = express();
 
 // Body parser
 app.use(express.json());
+app.use(requestLogger); // Attach client IP to every request
+app.use(ipRateLimit);  // Rate limit: 200 req/min per IP
 app.use(express.urlencoded({ extended: false }));
 
 // BR-P0-001 Bug 3: Cookie parser for HttpOnly cookies
 app.use(cookieParser());
 
 // CORS - Allow multiple origins (Vercel frontend + localhost for development)
-const allowedOrigins = process.env.CORS_ORIGIN 
+const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',').map(origin => origin.trim())
   : ['http://localhost:3000', 'https://hrmssystem.vercel.app'];
 
@@ -35,7 +47,7 @@ app.use(
         console.log('CORS: Request with no origin, allowing');
         return callback(null, true);
       }
-      
+
       if (allowedOrigins.indexOf(origin) !== -1) {
         console.log('CORS: Origin allowed:', origin);
         callback(null, true);
@@ -119,6 +131,20 @@ app.use('/api/org', require('./routes/organizationUnits'));
 app.use('/api', require('./routes/moduleManagement')); // Module Management routes
 app.use('/api/platform-admin', require('./routes/platformAdmin')); // Super Admin: packages, integrations, settings, analytics
 app.use('/api/profile-update-requests', require('./routes/profileUpdateRequests')); // BRD: BR-P2-005 - ESS Profile update requests
+// ══ New feature routes ══
+app.use('/api/disciplinary', require('./routes/disciplinary')); // Disciplinary records
+app.use('/api/promotions', require('./routes/promotions')); // Promotion management
+app.use('/api/competencies', require('./routes/competency')); // Competency framework library
+app.use('/api/appraisal-disputes', require('./routes/appraisalDisputes')); // Appraisal dispute mechanism
+app.use('/api/sessions', require('./routes/sessions')); // Session management
+app.use('/api/increments', require('./routes/increments')); // Increment management (appraisal → salary increment)
+// Payroll queue API (enqueue + status polling)
+const payrollQueueCtrl = require('./controllers/payrollQueueController');
+const { protect: authProtect } = require('./middleware/auth');
+app.post('/api/payroll/queue/process', authProtect, payrollQueueCtrl.enqueuePayrollJob);
+app.get('/api/payroll/queue/job/:jobId', authProtect, payrollQueueCtrl.getJobStatus);
+app.get('/api/payroll/queue/stats', authProtect, payrollQueueCtrl.getQueueStats);
+
 
 // Health check
 app.get('/api/health', (req, res) => {

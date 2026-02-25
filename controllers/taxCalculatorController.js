@@ -191,7 +191,7 @@ exports.selectRegime = asyncHandler(async (req, res) => {
   await createAuditLog({
     tenantId: req.tenantId,
     userId: req.user._id,
-    action: 'CREATE',
+    action: 'Create',
     entityType: 'TaxRegimeSelection',
     entityId: regimeSelection._id,
     description: `Tax regime selected: ${regime} for FY ${currentFY}`,
