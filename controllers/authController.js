@@ -325,10 +325,13 @@ exports.login = asyncHandler(async (req, res) => {
     
     // BR-P0-001 Bug 3: Store JWT in HttpOnly cookie (not localStorage)
     // Cookie expires in 7 days (matching JWT expiry)
+    const isProd = process.env.NODE_ENV === 'production';
     const cookieOptions = {
       httpOnly: true, // Prevents JavaScript access (XSS protection)
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-      sameSite: 'lax', // CSRF protection
+      secure: isProd, // HTTPS only in production
+      // In production, frontend and backend are on different domains,
+      // so SameSite must be 'none' to allow cross-site cookies.
+      sameSite: isProd ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
       path: '/', // Available for all routes
     };
