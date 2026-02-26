@@ -4,7 +4,7 @@ const auditLogSchema = new mongoose.Schema({
   tenantId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Tenant',
-    required: true,
+    required: false, // Optional — Super Admin actions have no tenant
     index: true,
   },
   userId: {

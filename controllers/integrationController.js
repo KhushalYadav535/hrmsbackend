@@ -1,4 +1,5 @@
 const PlatformIntegration = require('../models/PlatformIntegration');
+const { createAuditLog } = require('../utils/auditLog');
 
 const DEFAULT_INTEGRATIONS = [
   { integrationCode: 'BIOMETRIC', integrationName: 'Biometric Integration', category: 'BIOMETRIC', description: 'Fingerprint/face attendance sync' },
@@ -31,6 +32,22 @@ exports.updateIntegration = async (req, res) => {
       { new: true }
     );
     if (!integration) return res.status(404).json({ success: false, message: 'Integration not found' });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?._id,
+      userName: req.user?.name || 'Super Admin',
+      userEmail: req.user?.email,
+      action: 'Configure',
+      module: 'Platform',
+      entityType: 'Integration',
+      entityId: integration._id,
+      description: `Integration "${integration.integrationName}" ${isEnabled ? 'enabled' : 'disabled'}`,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      status: 'Success',
+    });
+
     res.json({ success: true, data: integration });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });

@@ -1,4 +1,5 @@
 const PlatformSettings = require('../models/PlatformSettings');
+const { createAuditLog } = require('../utils/auditLog');
 
 const DEFAULTS = {
   billingCycle: 'MONTHLY',
@@ -36,6 +37,21 @@ exports.updateSettings = async (req, res) => {
     const docs = await PlatformSettings.find();
     const settings = {};
     docs.forEach(d => { settings[d.key] = d.value; });
+
+    // Audit log
+    await createAuditLog({
+      userId: req.user?._id,
+      userName: req.user?.name || 'Super Admin',
+      userEmail: req.user?.email,
+      action: 'Configure',
+      module: 'Platform',
+      entityType: 'PlatformSettings',
+      description: `Platform settings updated: ${Object.keys(updates).join(', ')}`,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      status: 'Success',
+    });
+
     res.json({ success: true, data: settings });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });

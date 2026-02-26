@@ -1,5 +1,78 @@
 const AuditLog = require('../models/AuditLog');
 
+// @desc    Get platform-level audit logs (Super Admin - no tenant filter)
+// @route   GET /api/platform-admin/audit-logs
+// @access  Private (Super Admin)
+exports.getPlatformAuditLogs = async (req, res) => {
+  try {
+    const { module, action, status, dateFrom, dateTo, search } = req.query;
+    const filter = {}; // No tenantId filter for Super Admin
+
+    if (module && module !== 'all') filter.module = module;
+    if (action && action !== 'all') filter.action = action;
+    if (status && status !== 'all') filter.status = status;
+
+    if (dateFrom || dateTo) {
+      filter.timestamp = {};
+      if (dateFrom) filter.timestamp.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        filter.timestamp.$lte = endDate;
+      }
+    }
+
+    if (search) {
+      filter.$or = [
+        { userName: { $regex: search, $options: 'i' } },
+        { userEmail: { $regex: search, $options: 'i' } },
+        { details: { $regex: search, $options: 'i' } },
+        { module: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const auditLogs = await AuditLog.find(filter)
+      .sort({ timestamp: -1 })
+      .limit(1000);
+
+    res.status(200).json({ success: true, count: auditLogs.length, data: auditLogs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Export platform-level audit logs (Super Admin)
+// @route   GET /api/platform-admin/audit-logs/export
+// @access  Private (Super Admin)
+exports.exportPlatformAuditLogs = async (req, res) => {
+  try {
+    const { module, action, status, dateFrom, dateTo } = req.query;
+    const filter = {};
+
+    if (module && module !== 'all') filter.module = module;
+    if (action && action !== 'all') filter.action = action;
+    if (status && status !== 'all') filter.status = status;
+
+    if (dateFrom || dateTo) {
+      filter.timestamp = {};
+      if (dateFrom) filter.timestamp.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        filter.timestamp.$lte = endDate;
+      }
+    }
+
+    const auditLogs = await AuditLog.find(filter)
+      .sort({ timestamp: -1 })
+      .limit(10000);
+
+    res.status(200).json({ success: true, count: auditLogs.length, data: auditLogs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // @desc    Get all audit logs
 // @route   GET /api/audit-logs
 // @access  Private (Tenant Admin, HR Administrator, System Administrator)

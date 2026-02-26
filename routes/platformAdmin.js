@@ -6,6 +6,7 @@ const platformModuleController = require('../controllers/platformModuleControlle
 const integrationController = require('../controllers/integrationController');
 const platformSettingsController = require('../controllers/platformSettingsController');
 const platformAnalyticsController = require('../controllers/platformAnalyticsController');
+const { getPlatformAuditLogs, exportPlatformAuditLogs } = require('../controllers/auditLogController');
 
 router.use(protect);
 router.use(authorize('Super Admin'));
@@ -31,5 +32,9 @@ router.put('/settings', platformSettingsController.updateSettings);
 
 // Analytics
 router.get('/analytics', platformAnalyticsController.getAnalytics);
+
+// Platform Audit Logs (Super Admin — no tenant filter)
+router.get('/audit-logs', getPlatformAuditLogs);
+router.get('/audit-logs/export', exportPlatformAuditLogs);
 
 module.exports = router;
