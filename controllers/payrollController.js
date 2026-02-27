@@ -102,7 +102,7 @@ const calculateProfessionalTax = (grossSalary, location) => {
   // Detect state from location
   let state = 'Maharashtra'; // Default
   const locationLower = (location || '').toLowerCase();
-  
+
   if (locationLower.includes('mumbai') || locationLower.includes('pune') || locationLower.includes('nagpur')) {
     state = 'Maharashtra';
   } else if (locationLower.includes('bangalore') || locationLower.includes('mysore')) {
@@ -127,14 +127,14 @@ const calculateProfessionalTax = (grossSalary, location) => {
 
   // Get PT rules for the state
   const rules = statePTRules[state] || statePTRules['Maharashtra'];
-  
+
   // Find applicable slab
   for (const rule of rules) {
     if (grossSalary >= rule.min && grossSalary <= rule.max) {
       return rule.tax;
     }
   }
-  
+
   return 0;
 };
 
@@ -160,8 +160,8 @@ const calculateIncomeTax = (annualSalary) => {
 // BRD Requirement: "Integrate attendance and leave data for LOP calculation"
 const calculateLOPDays = async (employeeId, tenantId, month, year) => {
   try {
-    const monthIndex = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'].indexOf(month);
+    const monthIndex = ['January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'].indexOf(month);
     if (monthIndex === -1) return { lopDays: 0, lopDeduction: 0 };
 
     const startDate = new Date(year, monthIndex, 1);
@@ -177,13 +177,13 @@ const calculateLOPDays = async (employeeId, tenantId, month, year) => {
 
     // Get unpaid leave days (LOP leaves)
     // Convert to ObjectId if they're strings, otherwise use as-is
-    const tenantObjectId = mongoose.Types.ObjectId.isValid(tenantId) 
+    const tenantObjectId = mongoose.Types.ObjectId.isValid(tenantId)
       ? (tenantId instanceof mongoose.Types.ObjectId ? tenantId : new mongoose.Types.ObjectId(tenantId))
       : tenantId;
     const employeeObjectId = mongoose.Types.ObjectId.isValid(employeeId)
       ? (employeeId instanceof mongoose.Types.ObjectId ? employeeId : new mongoose.Types.ObjectId(employeeId))
       : employeeId;
-    
+
     const unpaidLeaves = await LeaveRequest.aggregate([
       {
         $match: {
@@ -201,15 +201,19 @@ const calculateLOPDays = async (employeeId, tenantId, month, year) => {
             $cond: [
               { $and: [{ $lte: ['$startDate', startDate] }, { $gte: ['$endDate', endDate] }] },
               { $dayOfMonth: endDate },
-              { $cond: [
-                { $lte: ['$startDate', startDate] },
-                { $subtract: [{ $dayOfMonth: endDate }, { $subtract: [{ $dayOfMonth: '$startDate' }, 1] }] },
-                { $cond: [
-                  { $gte: ['$endDate', endDate] },
-                  { $subtract: [{ $dayOfMonth: '$endDate' }, { $subtract: [{ $dayOfMonth: startDate }, 1] }] },
-                  { $subtract: [{ $dayOfMonth: '$endDate' }, { $subtract: [{ $dayOfMonth: '$startDate' }, 1] }] },
-                ]},
-              ]},
+              {
+                $cond: [
+                  { $lte: ['$startDate', startDate] },
+                  { $subtract: [{ $dayOfMonth: endDate }, { $subtract: [{ $dayOfMonth: '$startDate' }, 1] }] },
+                  {
+                    $cond: [
+                      { $gte: ['$endDate', endDate] },
+                      { $subtract: [{ $dayOfMonth: '$endDate' }, { $subtract: [{ $dayOfMonth: startDate }, 1] }] },
+                      { $subtract: [{ $dayOfMonth: '$endDate' }, { $subtract: [{ $dayOfMonth: '$startDate' }, 1] }] },
+                    ]
+                  },
+                ]
+              },
             ],
           },
         },
@@ -235,15 +239,15 @@ const validateProcessingDeadline = (month, year) => {
   const today = new Date();
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth();
-  
-  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
-                     'July', 'August', 'September', 'October', 'November', 'December'];
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
   const payrollMonthIndex = monthNames.indexOf(month);
-  
+
   if (payrollMonthIndex === -1) {
     return { valid: false, message: 'Invalid month name' };
   }
-  
+
   // Check if processing for current month/year
   if (year === currentYear && payrollMonthIndex === currentMonth) {
     const dayOfMonth = today.getDate();
@@ -255,7 +259,7 @@ const validateProcessingDeadline = (month, year) => {
       };
     }
   }
-  
+
   return { valid: true };
 };
 
@@ -394,7 +398,7 @@ exports.createPayroll = async (req, res) => {
     // Calculate EPF and ESI if not provided
     if (req.body.basicSalary) {
       const grossSalary = (req.body.basicSalary || 0) + (req.body.da || 0) + (req.body.hra || 0) + (req.body.allowances || 0);
-      
+
       // EPF calculation
       const epfData = calculateEPF(req.body.basicSalary, req.body.da || 0);
       req.body.pfDeduction = epfData.employee;
@@ -416,9 +420,9 @@ exports.createPayroll = async (req, res) => {
 
     // Calculate net salary
     const grossSalary = (req.body.basicSalary || 0) + (req.body.da || 0) + (req.body.hra || 0) + (req.body.allowances || 0);
-    const totalDeductions = (req.body.pfDeduction || 0) + (req.body.esiDeduction || 0) + 
-                           (req.body.incomeTax || 0) + (req.body.otherDeductions || 0) + 
-                           (req.body.lopDeduction || 0) + (req.body.loanDeductions || 0);
+    const totalDeductions = (req.body.pfDeduction || 0) + (req.body.esiDeduction || 0) +
+      (req.body.incomeTax || 0) + (req.body.otherDeductions || 0) +
+      (req.body.lopDeduction || 0) + (req.body.loanDeductions || 0);
     req.body.netSalary = grossSalary - totalDeductions;
 
     // Set initial status
@@ -550,7 +554,7 @@ exports.processPayroll = async (req, res) => {
         const professionalTax = calculateProfessionalTax(grossSalary, employee.location || '');
         const annualSalary = grossSalary * 12;
         const incomeTax = calculateIncomeTax(annualSalary);
-        
+
         // BRD Requirement: Loan deductions integration (NEW - Auto-deduct EMI)
         let loanDeductions = 0;
         let loanEMIDetails = [];
@@ -576,7 +580,7 @@ exports.processPayroll = async (req, res) => {
             loanDeductions = 0;
           }
         }
-        
+
         // BRD Requirement: LOP calculation from attendance and leave
         let lopDays = 0;
         let lopDeduction = 0;
@@ -590,7 +594,7 @@ exports.processPayroll = async (req, res) => {
           lopDays = 0;
           lopDeduction = 0; // Continue with 0 LOP if error
         }
-        
+
         // Total deductions including LOP and loans
         const totalDeductions = epfData.employee + esiData.employee + incomeTax + professionalTax + lopDeduction + loanDeductions;
         const netSalary = Math.round(grossSalary - totalDeductions);
@@ -639,7 +643,7 @@ exports.processPayroll = async (req, res) => {
           employeeDesignation: designation, // Store for grouping
           // Note: approvalHistory is not set for Draft status - it will be added when payroll is Submitted
         });
-        
+
         await payroll.save();
 
         // Update loan EMI records with payroll ID (if EMI was deducted and payrollId was null)
@@ -768,7 +772,7 @@ exports.getPayrollStats = async (req, res) => {
   try {
     const { month, year } = req.query;
     const filter = { tenantId: req.tenantId };
-    
+
     // Security: Employees and Managers cannot see organization-wide stats
     // They should use individual payroll endpoints
     const adminRoles = ['Payroll Administrator', 'HR Administrator', 'Tenant Admin', 'Finance Administrator', 'Auditor', 'Super Admin'];
@@ -778,7 +782,7 @@ exports.getPayrollStats = async (req, res) => {
         message: 'Access denied. You do not have permission to view payroll statistics.',
       });
     }
-    
+
     if (month) filter.month = month;
     if (year) filter.year = parseInt(year);
 
@@ -810,7 +814,11 @@ exports.getPayrollStats = async (req, res) => {
       statsByDesignation[designation].totalDA += payroll.da || 0;
       statsByDesignation[designation].totalHRA += payroll.hra || 0;
       statsByDesignation[designation].totalAllowances += payroll.allowances || 0;
-      statsByDesignation[designation].totalGross += payroll.grossSalary || 0;
+      let gross = payroll.grossSalary || 0;
+      if (gross === 0 && (payroll.basicSalary || payroll.da || payroll.hra || payroll.allowances)) {
+        gross = (payroll.basicSalary || 0) + (payroll.da || 0) + (payroll.hra || 0) + (payroll.allowances || 0);
+      }
+      statsByDesignation[designation].totalGross += gross;
       statsByDesignation[designation].totalEPF += payroll.pfDeduction || 0;
       statsByDesignation[designation].totalESI += payroll.esiDeduction || 0;
       statsByDesignation[designation].totalTax += payroll.incomeTax || 0;
@@ -833,7 +841,7 @@ exports.getPayrollStats = async (req, res) => {
       }
       return sum + gross;
     }, 0);
-    
+
     const totalDeductions = payrolls.reduce((sum, p) => sum + (p.pfDeduction || 0) + (p.esiDeduction || 0) + (p.incomeTax || 0) + (p.otherDeductions || 0) + (p.lopDeduction || 0) + (p.loanDeductions || 0), 0);
     const totalNet = payrolls.reduce((sum, p) => sum + (p.netSalary || 0), 0);
 
@@ -1004,9 +1012,9 @@ exports.approvePayroll = async (req, res) => {
       // Checker or null (legacy) can approve
     }
 
-    const canApprove = req.user.role === 'Payroll Administrator' || 
-                      req.user.role === 'Finance Administrator' || 
-                      req.user.role === 'Super Admin';
+    const canApprove = req.user.role === 'Payroll Administrator' ||
+      req.user.role === 'Finance Administrator' ||
+      req.user.role === 'Super Admin';
 
     if (!canApprove) {
       return res.status(403).json({
@@ -1018,7 +1026,7 @@ exports.approvePayroll = async (req, res) => {
     // BRD Requirement: Maker-checker - checker must be different from maker
     // Checker can approve Draft payrolls created by different Maker OR Submitted payrolls
     const isMaker = payroll.makerId && payroll.makerId.toString() === req.user._id.toString();
-    
+
     if ((payroll.status === 'Draft' || payroll.status === 'Submitted') && isMaker) {
       return res.status(400).json({
         success: false,
@@ -1137,7 +1145,7 @@ exports.approvePayroll = async (req, res) => {
 exports.rejectPayroll = async (req, res) => {
   try {
     const { reason } = req.body;
-    
+
     if (!reason) {
       return res.status(400).json({
         success: false,
@@ -1167,9 +1175,9 @@ exports.rejectPayroll = async (req, res) => {
       }
     }
 
-    const canReject = req.user.role === 'Payroll Administrator' || 
-                     req.user.role === 'Finance Administrator' || 
-                     req.user.role === 'Super Admin';
+    const canReject = req.user.role === 'Payroll Administrator' ||
+      req.user.role === 'Finance Administrator' ||
+      req.user.role === 'Super Admin';
 
     if (!canReject) {
       return res.status(403).json({
@@ -1410,9 +1418,9 @@ exports.finalizePayroll = async (req, res) => {
     }
 
     // Check permissions
-    const canFinalize = req.user.role === 'Finance Administrator' || 
-                       req.user.role === 'Payroll Administrator' || 
-                       req.user.role === 'Super Admin';
+    const canFinalize = req.user.role === 'Finance Administrator' ||
+      req.user.role === 'Payroll Administrator' ||
+      req.user.role === 'Super Admin';
 
     if (!canFinalize) {
       return res.status(403).json({

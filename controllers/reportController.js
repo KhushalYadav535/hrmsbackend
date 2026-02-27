@@ -40,6 +40,15 @@ exports.getDashboardStats = async (req, res) => {
       joinDate: { $gte: startOfMonth }
     });
 
+    const inactiveEmployees = await Employee.countDocuments({ tenantId, status: { $in: ['Inactive', 'Retired'] } });
+    const onLeaveToday = await Employee.countDocuments({ tenantId, status: 'On Leave' });
+
+    // Add recent joinings for Tenant Admin
+    const recentJoiningsList = await Employee.find({ tenantId })
+      .sort({ joinDate: -1 })
+      .select('firstName lastName designation department status joinDate')
+      .limit(5);
+
     // 2. Department Distribution
     const departmentDistribution = await Employee.aggregate([
       { $match: { tenantId: new mongoose.Types.ObjectId(tenantId), status: 'Active' } },
@@ -159,7 +168,11 @@ exports.getDashboardStats = async (req, res) => {
         openPositions: openPositionsCount,
         applications: totalApplications,
         departmentData,
-        financialData
+        financialData,
+        activeEmployees: totalEmployees,
+        inactiveEmployees,
+        onLeaveToday,
+        recentJoiningsList
       }
     });
 

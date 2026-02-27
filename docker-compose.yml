@@ -1,0 +1,31 @@
+version: "3.9"
+
+services:
+  hrms-backend:
+    image: hrms-backend:latest       # built locally then pushed / or built on VPS
+    container_name: hrms-backend
+    restart: unless-stopped
+    env_file:
+      - .env.production              # keep secrets off the repo
+    ports:
+      # Traefik will reverse-proxy; we expose internally only
+      - "5000:5000"
+    networks:
+      - traefik-public               # must match the Traefik network on your VPS
+    labels:
+      # ── Traefik labels ─────────────────────────────────────────────────────
+      - "traefik.enable=true"
+      - "traefik.http.routers.hrms-backend.rule=Host(`api.hrmssystem.com`)"
+      - "traefik.http.routers.hrms-backend.entrypoints=websecure"
+      - "traefik.http.routers.hrms-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.hrms-backend.loadbalancer.server.port=5000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  traefik-public:
+    external: true      # Traefik already created this network on your VPS

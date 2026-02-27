@@ -15,9 +15,9 @@ exports.getTravelRequests = async (req, res) => {
 
     // Security: If user is Employee, restrict to their own records ONLY
     if (req.user.role === 'Employee') {
-      const employee = await Employee.findOne({ 
+      const employee = await Employee.findOne({
         email: req.user.email,
-        tenantId: req.tenantId 
+        tenantId: req.tenantId
       });
 
       if (!employee) {
@@ -111,11 +111,11 @@ exports.createTravelRequest = async (req, res) => {
     }
 
     // Find employee by user email
-    const employee = await Employee.findOne({ 
+    const employee = await Employee.findOne({
       email: req.user.email,
       tenantId: req.tenantId
     });
-    
+
     if (!employee) {
       return res.status(404).json({
         success: false,
@@ -126,7 +126,7 @@ exports.createTravelRequest = async (req, res) => {
     // Validate dates
     const departure = new Date(departureDate);
     const returnDateObj = new Date(returnDate);
-    
+
     if (departure >= returnDateObj) {
       return res.status(400).json({
         success: false,
@@ -150,7 +150,7 @@ exports.createTravelRequest = async (req, res) => {
         // Check if employee is requesting higher class than entitled
         // This would be validated during claim submission
       }
-      
+
       // Validate estimated amount against policy limits
       if (travelPolicy.advanceLimit.maxAmount > 0 && estimatedAmount > travelPolicy.advanceLimit.maxAmount) {
         policyCompliant = false;
@@ -183,11 +183,12 @@ exports.createTravelRequest = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
+      userName: req.user.name || req.user.email,
       action: 'Create',
       module: 'TRV',
       entityType: 'TravelRequest',
       entityId: travelRequest._id,
-      description: `Created travel request: ${travelType} from ${origin} to ${destination}`,
+      details: `Created travel request: ${travelType} from ${origin} to ${destination}`,
       changes: JSON.stringify({ created: req.body }),
     });
 
@@ -237,11 +238,12 @@ exports.updateTravelRequest = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
+      userName: req.user.name || req.user.email,
       action: 'Update',
       module: 'TRV',
       entityType: 'TravelRequest',
       entityId: travelRequest._id,
-      description: `Updated travel request`,
+      details: `Updated travel request`,
       changes: JSON.stringify({ updated: req.body }),
     });
 
@@ -299,11 +301,12 @@ exports.submitTravelRequest = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: 'SUBMIT',
+      userName: req.user.name || req.user.email,
+      action: 'Submit',
       module: 'TRV',
       entityType: 'TravelRequest',
       entityId: travelRequest._id,
-      description: `Submitted travel request for approval`,
+      details: `Submitted travel request for approval`,
       changes: JSON.stringify({ submitted: true }),
     });
 
@@ -328,7 +331,7 @@ exports.submitTravelRequest = async (req, res) => {
 exports.approveTravelRequest = async (req, res) => {
   try {
     const { status, comments } = req.body;
-    
+
     if (!['Approved', 'Rejected'].includes(status)) {
       return res.status(400).json({
         success: false,
@@ -392,11 +395,12 @@ exports.approveTravelRequest = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
-      action: status.toUpperCase(),
+      userName: req.user.name || req.user.email,
+      action: status === 'Approved' ? 'Approve' : 'Reject',
       module: 'TRV',
       entityType: 'TravelRequest',
       entityId: travelRequest._id,
-      description: `${status} travel request`,
+      details: `${status} travel request`,
       changes: JSON.stringify({ status, comments }),
     });
 
@@ -445,11 +449,12 @@ exports.deleteTravelRequest = async (req, res) => {
     await AuditLog.create({
       tenantId: req.tenantId,
       userId: req.user._id,
+      userName: req.user.name || req.user.email,
       action: 'Delete',
       module: 'TRV',
       entityType: 'TravelRequest',
       entityId: req.params.id,
-      description: `Deleted travel request`,
+      details: `Deleted travel request`,
       changes: JSON.stringify({ deleted: travelRequest.toObject() }),
     });
 

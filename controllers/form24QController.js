@@ -61,7 +61,11 @@ exports.generateForm24Q = asyncHandler(async (req, res) => {
   };
 
   const months = quarterMonths[quarter];
-  const year = quarter === 'Q4' ? parseInt(financialYear.split('-')[1]) : parseInt(financialYear.split('-')[0]);
+  let yearPart = quarter === 'Q4' ? financialYear.split('-')[1] : financialYear.split('-')[0];
+  if (yearPart && yearPart.length === 2) {
+    yearPart = '20' + yearPart;
+  }
+  const year = parseInt(yearPart);
 
   // Get all payrolls for the quarter
   const payrolls = await Payroll.find({
@@ -393,7 +397,7 @@ exports.downloadForm16PartA = asyncHandler(async (req, res) => {
   res.send(fileBuffer);
 
   // Clean up temp file
-  await fs.unlink(downloadResult.filePath).catch(() => {});
+  await fs.unlink(downloadResult.filePath).catch(() => { });
 
   // Log download
   await AuditLog.create({

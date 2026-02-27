@@ -112,9 +112,8 @@ travelRequestSchema.index({ tenantId: 1, status: 1 });
 travelRequestSchema.index({ tenantId: 1, approverId: 1, status: 1 });
 travelRequestSchema.index({ tenantId: 1, departureDate: 1 });
 
-travelRequestSchema.pre('save', function (next) {
+travelRequestSchema.pre('save', function () {
   this.updatedAt = Date.now();
-  next();
 });
 
 module.exports = mongoose.model('TravelRequest', travelRequestSchema);

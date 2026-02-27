@@ -49,33 +49,33 @@ router.use(requireModule('TAX')); // BRD: DM-037 - Module access protection
 router
   .route('/declarations')
   .post(authorize('Employee'), createDeclaration)
-  .get(authorize('Employee', 'HR Admin', 'Payroll Admin', 'Tenant Admin'), getDeclarations);
+  .get(authorize('Employee', 'HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), getDeclarations);
 
 router
   .route('/declarations/:id')
-  .get(authorize('Employee', 'HR Admin', 'Payroll Admin', 'Tenant Admin'), getDeclaration);
+  .get(authorize('Employee', 'HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), getDeclaration);
 
 router
   .route('/declarations/:id/status')
-  .put(authorize('HR Admin', 'Payroll Admin', 'Tenant Admin'), updateDeclarationStatus);
+  .put(authorize('HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), updateDeclarationStatus);
 
 // Tax Computation
 router
   .route('/computation')
-  .get(authorize('Employee', 'HR Admin', 'Payroll Admin', 'Tenant Admin'), getTaxComputation);
+  .get(authorize('Employee', 'HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), getTaxComputation);
 
 router
   .route('/computation/calculate')
-  .post(authorize('Payroll Admin', 'Tenant Admin'), calculateMonthlyTDS);
+  .post(authorize('Payroll Administrator', 'Tenant Admin', 'Maker'), calculateMonthlyTDS);
 
 router
   .route('/computation/sheet')
-  .get(authorize('Employee', 'HR Admin', 'Payroll Admin', 'Tenant Admin'), getTaxComputationSheet);
+  .get(authorize('Employee', 'HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), getTaxComputationSheet);
 
 // Tax Calculator
 router
   .route('/calculator/compare-regimes')
-  .post(authorize('Employee', 'HR Admin', 'Payroll Admin', 'Tenant Admin'), compareRegimes);
+  .post(authorize('Employee', 'HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), compareRegimes);
 
 router
   .route('/calculator/select-regime')
@@ -83,52 +83,52 @@ router
 
 router
   .route('/calculator/recommended-regime')
-  .get(authorize('Employee', 'HR Admin', 'Payroll Admin', 'Tenant Admin'), getRecommendedRegime);
+  .get(authorize('Employee', 'HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), getRecommendedRegime);
 
 router
   .route('/calculator/hra')
-  .post(authorize('Employee', 'HR Admin', 'Payroll Admin', 'Tenant Admin'), calculateHRA);
+  .post(authorize('Employee', 'HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), calculateHRA);
 
 // Form 16
 router
   .route('/form16')
-  .get(authorize('Employee', 'HR Admin', 'Payroll Admin', 'Tenant Admin'), getForm16)
-  .post(authorize('Payroll Admin', 'Tenant Admin'), generateForm16);
+  .get(authorize('Employee', 'HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), getForm16)
+  .post(authorize('Payroll Administrator', 'Tenant Admin', 'Maker'), generateForm16);
 
 // HRA Declaration
 router
   .route('/hra')
-  .get(authorize('Employee', 'HR Admin', 'Payroll Admin', 'Tenant Admin'), getHRADeclaration)
+  .get(authorize('Employee', 'HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), getHRADeclaration)
   .post(authorize('Employee'), createHRADeclaration);
 
 router
   .route('/hra/:id/verify')
-  .put(authorize('HR Admin', 'Payroll Admin', 'Tenant Admin'), verifyHRADeclaration);
+  .put(authorize('HR Administrator', 'Payroll Administrator', 'Tenant Admin', 'Maker'), verifyHRADeclaration);
 
 // Form 24Q (TRACES)
 router
   .route('/form24q')
-  .get(authorize('Payroll Admin', 'HR Admin', 'Tenant Admin'), getForm24Qs)
-  .post(authorize('Payroll Admin', 'Tenant Admin'), generateForm24Q);
+  .get(authorize('Payroll Administrator', 'HR Administrator', 'Tenant Admin', 'Maker'), getForm24Qs)
+  .post(authorize('Payroll Administrator', 'Tenant Admin', 'Maker'), generateForm24Q);
 
 router
   .route('/form24q/:form24QId')
-  .get(authorize('Payroll Admin', 'HR Admin', 'Tenant Admin'), getForm24Q);
+  .get(authorize('Payroll Administrator', 'HR Administrator', 'Tenant Admin', 'Maker'), getForm24Q);
 
 router
   .route('/form24q/:form24QId/validate')
-  .post(authorize('Payroll Admin', 'Tenant Admin'), validateForm24Q);
+  .post(authorize('Payroll Administrator', 'Tenant Admin', 'Maker'), validateForm24Q);
 
 router
   .route('/form24q/:form24QId/upload')
-  .post(authorize('Payroll Admin', 'Tenant Admin'), uploadForm24Q);
+  .post(authorize('Payroll Administrator', 'Tenant Admin', 'Maker'), uploadForm24Q);
 
 router
   .route('/form24q/:form24QId/traces-status')
-  .get(authorize('Payroll Admin', 'HR Admin', 'Tenant Admin'), checkTRACESStatus);
+  .get(authorize('Payroll Administrator', 'HR Administrator', 'Tenant Admin', 'Maker'), checkTRACESStatus);
 
 router
   .route('/form24q/form16-part-a')
-  .get(authorize('Payroll Admin', 'HR Admin', 'Tenant Admin', 'Employee'), downloadForm16PartA);
+  .get(authorize('Payroll Administrator', 'HR Administrator', 'Tenant Admin', 'Employee', 'Maker'), downloadForm16PartA);
 
 module.exports = router;

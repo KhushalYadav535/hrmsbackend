@@ -18,7 +18,7 @@ const { createAuditLog } = require('../utils/auditLog');
 exports.generateBankFile = async (req, res) => {
   try {
     const { month, year, format = 'NEFT' } = req.query;
-    
+
     if (!month || !year) {
       return res.status(400).json({
         success: false,
@@ -27,9 +27,9 @@ exports.generateBankFile = async (req, res) => {
     }
 
     // BRD Requirement: Only Payroll Admin or Finance Admin can generate bank files
-    if (req.user.role !== 'Payroll Administrator' && 
-        req.user.role !== 'Finance Administrator' && 
-        req.user.role !== 'Super Admin') {
+    if (req.user.role !== 'Payroll Administrator' &&
+      req.user.role !== 'Finance Administrator' &&
+      req.user.role !== 'Super Admin') {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll and Finance Administrators can generate bank files.',
@@ -59,7 +59,7 @@ exports.generateBankFile = async (req, res) => {
       // NEFT Format: Bank-specific format (simplified - actual format depends on bank)
       // Format: Account Number|IFSC|Amount|Beneficiary Name|Remarks
       fileName = `NEFT_${month}_${year}_${timestamp}.txt`;
-      
+
       fileContent = payrolls.map(payroll => {
         const employee = payroll.employeeId;
         const accountNo = employee?.bankAccount || '';
@@ -67,14 +67,14 @@ exports.generateBankFile = async (req, res) => {
         const amount = payroll.netSalary || 0;
         const beneficiaryName = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim();
         const remarks = `SALARY-${month}-${year}-${employee?.employeeCode || ''}`;
-        
+
         return `${accountNo}|${ifsc}|${amount}|${beneficiaryName}|${remarks}`;
       }).join('\n');
 
     } else if (format === 'RTGS') {
       // RTGS Format: Similar to NEFT but for amounts >= ₹2 lakh
       fileName = `RTGS_${month}_${year}_${timestamp}.txt`;
-      
+
       fileContent = payrolls
         .filter(p => (p.netSalary || 0) >= 200000)
         .map(payroll => {
@@ -84,7 +84,7 @@ exports.generateBankFile = async (req, res) => {
           const amount = payroll.netSalary || 0;
           const beneficiaryName = `${employee?.firstName || ''} ${employee?.lastName || ''}`.trim();
           const remarks = `SALARY-${month}-${year}-${employee?.employeeCode || ''}`;
-          
+
           return `${accountNo}|${ifsc}|${amount}|${beneficiaryName}|${remarks}`;
         }).join('\n');
 
@@ -92,14 +92,14 @@ exports.generateBankFile = async (req, res) => {
       // Internal Transfer Format (Indian Bank specific)
       // Format: Employee Code|Account Number|Amount|Narration
       fileName = `INTERNAL_${month}_${year}_${timestamp}.txt`;
-      
+
       fileContent = payrolls.map(payroll => {
         const employee = payroll.employeeId;
         const employeeCode = employee?.employeeCode || '';
         const accountNo = employee?.bankAccount || '';
         const amount = payroll.netSalary || 0;
         const narration = `SALARY-${month}-${year}`;
-        
+
         return `${employeeCode}|${accountNo}|${amount}|${narration}`;
       }).join('\n');
 
@@ -122,7 +122,7 @@ exports.generateBankFile = async (req, res) => {
     for (let index = 0; index < payrolls.length; index++) {
       const payroll = payrolls[index];
       const employee = payroll.employeeId;
-      
+
       if (!employee?.bankAccount || !employee?.ifscCode) {
         invalidRecords.push({
           employeeCode: employee?.employeeCode || 'N/A',
@@ -240,7 +240,7 @@ exports.generateBankFile = async (req, res) => {
 exports.generateECRFile = async (req, res) => {
   try {
     const { month, year } = req.query;
-    
+
     if (!month || !year) {
       return res.status(400).json({
         success: false,
@@ -266,7 +266,7 @@ exports.generateECRFile = async (req, res) => {
     // Get tenant EPFO configuration
     const tenant = await Tenant.findById(req.tenantId);
     const epfoConfig = tenant?.integrations?.epfo || {};
-    
+
     // Initialize EPFO Service
     const epfoService = new EPFOService(epfoConfig);
 
@@ -295,9 +295,9 @@ exports.generateECRFile = async (req, res) => {
     res.send(ecrData.fileContent);
 
   } catch (error) {
-    res.status(500).json({
+    res.status(error.message.includes('No EPF contributions') ? 400 : 500).json({
       success: false,
-      message: 'Server error',
+      message: error.message || 'Server error',
       error: error.message,
     });
   }
@@ -328,7 +328,7 @@ exports.uploadECRFile = async (req, res) => {
     // Get tenant EPFO configuration
     const tenant = await Tenant.findById(req.tenantId);
     const epfoConfig = tenant?.integrations?.epfo || {};
-    
+
     // Initialize EPFO Service
     const epfoService = new EPFOService(epfoConfig);
 
@@ -390,7 +390,7 @@ exports.downloadEPFOAcknowledgment = async (req, res) => {
     // Get tenant EPFO configuration
     const tenant = await Tenant.findById(req.tenantId);
     const epfoConfig = tenant?.integrations?.epfo || {};
-    
+
     // Initialize EPFO Service
     const epfoService = new EPFOService(epfoConfig);
 
@@ -436,7 +436,7 @@ exports.validateUAN = async (req, res) => {
     // Get tenant EPFO configuration
     const tenant = await Tenant.findById(req.tenantId);
     const epfoConfig = tenant?.integrations?.epfo || {};
-    
+
     // Initialize EPFO Service
     const epfoService = new EPFOService(epfoConfig);
 
@@ -481,7 +481,7 @@ exports.bulkValidateUANs = async (req, res) => {
     // Get tenant EPFO configuration
     const tenant = await Tenant.findById(req.tenantId);
     const epfoConfig = tenant?.integrations?.epfo || {};
-    
+
     // Initialize EPFO Service
     const epfoService = new EPFOService(epfoConfig);
 
@@ -514,7 +514,7 @@ exports.bulkValidateUANs = async (req, res) => {
 exports.generateESICFile = async (req, res) => {
   try {
     const { month, year } = req.query;
-    
+
     if (!month || !year) {
       return res.status(400).json({
         success: false,
@@ -540,7 +540,7 @@ exports.generateESICFile = async (req, res) => {
     // Get tenant ESIC configuration
     const tenant = await Tenant.findById(req.tenantId);
     const esicConfig = tenant?.integrations?.esic || {};
-    
+
     // Initialize ESIC Service
     const esicService = new ESICService(esicConfig);
 
@@ -568,9 +568,9 @@ exports.generateESICFile = async (req, res) => {
     res.send(esicData.fileContent);
 
   } catch (error) {
-    res.status(500).json({
+    res.status(error.message.includes('No ESIC contributions') ? 400 : 500).json({
       success: false,
-      message: 'Server error',
+      message: error.message || 'Server error',
       error: error.message,
     });
   }
@@ -601,7 +601,7 @@ exports.uploadESICFile = async (req, res) => {
     // Get tenant ESIC configuration
     const tenant = await Tenant.findById(req.tenantId);
     const esicConfig = tenant?.integrations?.esic || {};
-    
+
     // Initialize ESIC Service
     const esicService = new ESICService(esicConfig);
 
@@ -663,7 +663,7 @@ exports.getESICPaymentStatus = async (req, res) => {
     // Get tenant ESIC configuration
     const tenant = await Tenant.findById(req.tenantId);
     const esicConfig = tenant?.integrations?.esic || {};
-    
+
     // Initialize ESIC Service
     const esicService = new ESICService(esicConfig);
 

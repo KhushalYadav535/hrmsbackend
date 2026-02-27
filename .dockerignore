@@ -1,0 +1,10 @@
+node_modules
+.env
+.env.*
+!.env.production.example
+.git
+.gitignore
+*.log
+coverage
+tests
+README*.md

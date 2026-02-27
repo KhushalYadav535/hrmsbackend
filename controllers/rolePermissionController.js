@@ -92,10 +92,19 @@ exports.getRolePermissions = async (req, res) => {
       rolePermissions = await RolePermission.insertMany(permissionsToCreate);
     }
 
+    // Ensure Super Admin has all permissions regardless of DB state
+    const processedData = rolePermissions.map(rp => {
+      if (rp.role === 'Super Admin') {
+        const obj = rp.toObject ? rp.toObject() : rp;
+        return { ...obj, permissions: allPermissions };
+      }
+      return rp;
+    });
+
     res.status(200).json({
       success: true,
-      count: rolePermissions.length,
-      data: rolePermissions,
+      count: processedData.length,
+      data: processedData,
     });
   } catch (error) {
     res.status(500).json({
@@ -133,9 +142,15 @@ exports.getRolePermission = async (req, res) => {
       });
     }
 
+    let responseData = rolePermission;
+    if (rolePermission.role === 'Super Admin') {
+      const obj = rolePermission.toObject ? rolePermission.toObject() : rolePermission;
+      responseData = { ...obj, permissions: allPermissions };
+    }
+
     res.status(200).json({
       success: true,
-      data: rolePermission,
+      data: responseData,
     });
   } catch (error) {
     res.status(500).json({

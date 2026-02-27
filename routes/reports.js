@@ -18,7 +18,7 @@ router.use(protect);
 router.use(setTenant);
 router.use(requireModule('REPORTS_BASIC')); // BRD: DM-037 - Module access protection
 
-router.get('/dashboard-stats', authorize('Tenant Admin', 'Super Admin'), getDashboardStats);
+router.get('/dashboard-stats', authorize('Tenant Admin', 'HR Administrator', 'Super Admin'), getDashboardStats);
 router.get('/comprehensive', authorize('Tenant Admin', 'HR Administrator', 'Payroll Administrator', 'Finance Administrator', 'Auditor'), getComprehensiveReports);
 
 // BR-P1-006: Standard reports & scheduled delivery
