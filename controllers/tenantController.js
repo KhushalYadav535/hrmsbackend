@@ -296,7 +296,8 @@ exports.rejectTenant = asyncHandler(async (req, res) => {
 exports.suspendTenant = asyncHandler(async (req, res) => {
   const { reason } = req.body;
 
-  if (!reason || reason.trim().length < 20) {
+  // Validate reason exists and is a string
+  if (!reason || typeof reason !== 'string' || reason.trim().length < 20) {
     return res.status(400).json({
       success: false,
       message: 'Suspension reason is required and must be at least 20 characters',
@@ -496,6 +497,14 @@ exports.reactivateTenant = asyncHandler(async (req, res) => {
     return res.status(400).json({
       success: false,
       message: 'Tenant is already active',
+    });
+  }
+
+  // Only allow reactivation for suspended or inactive tenants
+  if (tenant.status !== 'suspended' && tenant.status !== 'inactive') {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot reactivate tenant with status: ${tenant.status}. Only suspended or inactive tenants can be reactivated.`,
     });
   }
 
