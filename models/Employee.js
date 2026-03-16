@@ -54,11 +54,28 @@ const employeeSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+  // Spec C1-01: Designation as FK reference to Designation Master (BR-C1-02)
+  // Searchable dropdown from Designation Master — no free-text
   designation: {
-    type: String,
+    type: mongoose.Schema.Types.Mixed,
     required: true,
-    trim: true,
+    comment: 'BR-C1-02: Designation stored as FK reference. Accepts ObjectId or legacy String.',
   },
+  // Spec C1-03: Grade field (BR-C1-12: mandatory)
+  // Auto-fills from Designation mapping if exists (BR-C1-14)
+  grade: {
+    type: mongoose.Schema.Types.Mixed,
+    comment: 'BR-C1-12: Grade is mandatory. FK reference to Grade Master or legacy String.',
+  },
+  // BR-C1-15: Track grade changes with effective dates
+  gradeHistory: [{
+    gradeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Grade' },
+    gradeName: { type: String },
+    effectiveDate: { type: Date, required: true },
+    reason: { type: String },
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    changedAt: { type: Date, default: Date.now },
+  }],
   department: {
     type: String,
     required: true,
@@ -76,10 +93,37 @@ const employeeSchema = new mongoose.Schema({
     index: true,
     comment: 'Organizational unit where employee is posted (HO/ZO/RO/Branch)',
   },
+  // Spec C1-02: Location as FK reference to Location Master (BR-C1-07)
   location: {
-    type: String,
+    type: mongoose.Schema.Types.Mixed,
     required: true,
-    comment: 'Location (can be derived from postingUnitId, kept for backward compatibility)',
+    comment: 'BR-C1-07: Location stored as FK reference. Accepts ObjectId or legacy String.',
+  },
+  // BR-C1-11: Track location transfers as events with effective dates
+  locationHistory: [{
+    locationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Location' },
+    locationName: { type: String },
+    effectiveDate: { type: Date, required: true },
+    reason: { type: String },
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    changedAt: { type: Date, default: Date.now },
+  }],
+  // BR-ORG-02: Track organization unit transfers as history events
+  transferHistory: [{
+    fromUnitId: { type: mongoose.Schema.Types.ObjectId, ref: 'OrganizationUnit' },
+    toUnitId: { type: mongoose.Schema.Types.ObjectId, ref: 'OrganizationUnit' },
+    effectiveDate: { type: Date, required: true },
+    transferId: { type: mongoose.Schema.Types.ObjectId, ref: 'EmployeeTransfer' },
+    transferType: { type: String, enum: ['Permanent', 'Temporary', 'Deputation'] },
+    reason: { type: String },
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    changedAt: { type: Date, default: Date.now },
+  }],
+  // Employment type per spec E3
+  employmentType: {
+    type: String,
+    enum: ['Permanent', 'Contract', 'Probation', 'Internship'],
+    default: 'Permanent',
   },
   salary: {
     type: Number,
@@ -155,12 +199,10 @@ const employeeSchema = new mongoose.Schema({
     comment: 'Universal Account Number (EPF) - 12 digits',
   },
   // DEPRECATED: bankAccount and ifscCode moved to EmployeeBankAccount model
-  // Keeping for backward compatibility during migration
   bankAccount: {
     type: String,
     trim: true,
-    select: false, // Hide by default - use EmployeeBankAccount model instead
-    // BRD Requirement: Field-level encryption for sensitive data
+    select: false,
     get: function(value) {
       if (!value) return value;
       try {
@@ -178,23 +220,22 @@ const employeeSchema = new mongoose.Schema({
     type: String,
     trim: true,
     uppercase: true,
-    select: false, // Hide by default - use EmployeeBankAccount model instead
+    select: false,
   },
   address: {
     type: String,
     trim: true,
   },
   // DEPRECATED: emergencyContact and emergencyPhone moved to EmployeeEmergencyContact model
-  // Keeping for backward compatibility during migration
   emergencyContact: {
     type: String,
     trim: true,
-    select: false, // Hide by default - use EmployeeEmergencyContact model instead
+    select: false,
   },
   emergencyPhone: {
     type: String,
     trim: true,
-    select: false, // Hide by default - use EmployeeEmergencyContact model instead
+    select: false,
   },
   bloodGroup: {
     type: String,
@@ -233,8 +274,8 @@ const employeeSchema = new mongoose.Schema({
 
 employeeSchema.index({ tenantId: 1, employeeCode: 1 }, { unique: true });
 employeeSchema.index({ tenantId: 1, email: 1 }, { unique: true });
-employeeSchema.index({ tenantId: 1, panNumber: 1 }, { unique: true, sparse: true }); // PAN unique per tenant
-employeeSchema.index({ tenantId: 1, postingUnitId: 1 }); // Index for organization unit queries
+employeeSchema.index({ tenantId: 1, panNumber: 1 }, { unique: true, sparse: true });
+employeeSchema.index({ tenantId: 1, postingUnitId: 1 });
 
 employeeSchema.pre('save', function (next) {
   this.updatedAt = Date.now();

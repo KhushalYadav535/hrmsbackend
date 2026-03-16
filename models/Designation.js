@@ -16,6 +16,18 @@ const designationSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  // Spec C1-03 / BR-C1-14: Default grade mapping for auto-population in Add Employee form
+  defaultGradeId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Grade',
+    default: null,
+    comment: 'BR-C1-14: If set, Grade auto-populates when this designation is selected',
+  },
+  // Department tag for categorization
+  departmentTag: {
+    type: String,
+    trim: true,
+  },
   level: {
     type: Number,
     default: 1,
@@ -34,10 +46,13 @@ const designationSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  // BR-C1-01: Only Active designations shown in dropdown
+  // BR-C1-03: Archived designations show (Archived) label on employee profile
   status: {
     type: String,
-    enum: ['Active', 'Inactive'],
+    enum: ['Active', 'Inactive', 'Archived'],
     default: 'Active',
+    index: true,
   },
   createdAt: {
     type: Date,

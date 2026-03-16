@@ -6,6 +6,7 @@ const {
   logout,
   getMe,
   registerTenant,
+  verifyRegistrationOTP,
   forgotPassword,
   resetPassword,
   changePassword,
@@ -22,6 +23,7 @@ const { setTenant } = require('../middleware/tenant');
 router.post('/register', register);
 router.post('/login', login);
 router.post('/register-tenant', registerTenant);
+router.post('/verify-registration-otp', verifyRegistrationOTP); // US-A2-01
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
 router.post('/sso', ssoLogin);

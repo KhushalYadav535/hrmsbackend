@@ -5,13 +5,20 @@ const Job = require('../models/Job');
 // @access  Private
 exports.getJobs = async (req, res) => {
   try {
-    const { status, department } = req.query;
+    const { status, department, postingUnitId, jobType } = req.query;
     const filter = { tenantId: req.tenantId };
 
     if (status) filter.status = status;
     if (department) filter.department = department;
+    if (postingUnitId) filter.postingUnitId = postingUnitId;
+    if (jobType) filter.jobType = jobType;
 
-    const jobs = await Job.find(filter).sort({ postedDate: -1 });
+    const jobs = await Job.find(filter)
+      .populate('postingUnitId', 'unitCode unitName unitType city state')
+      .populate('designation', 'name')
+      .populate('grade', 'name')
+      .populate('locationId', 'name city state')
+      .sort({ postedDate: -1 });
 
     res.status(200).json({
       success: true,
@@ -74,12 +81,41 @@ exports.createJob = async (req, res) => {
     req.body.tenantId = req.tenantId;
 
     // Validate required fields
-    const { title, department, openPositions } = req.body;
+    const { title, department, openPositions, postingUnitId, jobType } = req.body;
     if (!title || !department || !openPositions) {
       return res.status(400).json({
         success: false,
         message: 'Please provide title, department, and openPositions',
       });
+    }
+
+    // BR-HRMS-02: Validate posting unit if provided
+    if (postingUnitId) {
+      const OrganizationUnit = require('../models/OrganizationUnit');
+      const unit = await OrganizationUnit.findOne({
+        _id: postingUnitId,
+        tenantId: req.tenantId,
+        isActive: true,
+      });
+      if (!unit) {
+        return res.status(400).json({
+          success: false,
+          message: 'Posting unit not found or inactive',
+        });
+      }
+      
+      // Auto-link location from branch
+      if (!req.body.locationId && unit.unitType === 'BRANCH') {
+        const Location = require('../models/Location');
+        const branchLocation = await Location.findOne({
+          tenantId: req.tenantId,
+          branchId: postingUnitId,
+          status: 'Active',
+        });
+        if (branchLocation) {
+          req.body.locationId = branchLocation._id;
+        }
+      }
     }
 
     // Ensure openPositions is a number and at least 1

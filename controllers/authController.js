@@ -77,7 +77,7 @@ exports.register = async (req, res) => {
 // @access  Public
 exports.login = asyncHandler(async (req, res) => {
   try {
-    const { email, password, tenantId } = req.body;
+    const { email, password, tenantId, recaptchaToken } = req.body;
 
     // Validate email & password
     if (!email || !password) {
@@ -85,6 +85,42 @@ exports.login = asyncHandler(async (req, res) => {
         success: false,
         message: 'Please provide email and password',
       });
+    }
+
+    // US-A1-03: Verify CAPTCHA if token provided (after 3 failed attempts)
+    if (recaptchaToken) {
+      try {
+        const axios = require('axios');
+        const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
+        if (recaptchaSecret) {
+          const verifyResponse = await axios.post('https://www.google.com/recaptcha/api/siteverify', null, {
+            params: {
+              secret: recaptchaSecret,
+              response: recaptchaToken,
+            },
+          });
+          
+          if (!verifyResponse.data.success || verifyResponse.data.score < 0.5) {
+            // Low score - likely bot, but allow login with warning logged
+            await AuditLog.create({
+              tenantId: null,
+              userId: null,
+              userName: email,
+              userEmail: email,
+              action: 'Login Failed',
+              module: 'Authentication',
+              entityType: 'User',
+              details: `Low reCAPTCHA score: ${verifyResponse.data.score}`,
+              ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+              userAgent: req.get('user-agent') || 'Unknown',
+              status: 'Warning',
+            });
+          }
+        }
+      } catch (captchaError) {
+        console.error('CAPTCHA verification error:', captchaError);
+        // Don't block login if CAPTCHA verification fails (graceful degradation)
+      }
     }
 
     // Check for user
@@ -586,65 +622,209 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// @desc    Register new tenant
+// @desc    Register new tenant (US-A2-01: Email OTP Verification)
 // @route   POST /api/auth/register-tenant
 // @access  Public
-exports.registerTenant = async (req, res) => {
-  try {
-    const { tenantName, code, location, adminEmail, adminPassword, adminName } = req.body;
+exports.registerTenant = asyncHandler(async (req, res) => {
+  const { tenantName, code, location, adminEmail, adminPassword, adminName } = req.body;
 
-    // Check if tenant exists
-    const tenantExists = await Tenant.findOne({ code: code.toUpperCase() });
-
-    if (tenantExists) {
-      return res.status(400).json({
-        success: false,
-        message: 'Tenant with this code already exists',
-      });
-    }
-
-    // Create tenant
-    const tenant = await Tenant.create({
-      name: tenantName,
-      code: code.toUpperCase(),
-      location,
+  // Validate inputs
+  if (!tenantName || !code || !adminEmail || !adminPassword) {
+    return res.status(400).json({
+      success: false,
+      message: 'Tenant name, code, admin email, and password are required',
     });
+  }
 
-    // Create admin user for tenant
+  // Check if tenant exists
+  const tenantExists = await Tenant.findOne({ code: code.toUpperCase() });
+  if (tenantExists) {
+    return res.status(400).json({
+      success: false,
+      message: 'Tenant with this code already exists',
+    });
+  }
+
+  // BR-A2-03: Validate email domain against disposable email blocklist
+  const disposableDomains = ['tempmail.com', '10minutemail.com', 'guerrillamail.com'];
+  const emailDomain = adminEmail.split('@')[1]?.toLowerCase();
+  if (disposableDomains.includes(emailDomain)) {
+    return res.status(400).json({
+      success: false,
+      message: 'Disposable email addresses are not allowed',
+    });
+  }
+
+  // Generate 6-digit OTP (US-A2-01)
+  const otp = generateOTP(6);
+  const otpHash = hashOTP(otp);
+  const otpExpiry = new Date();
+  otpExpiry.setMinutes(otpExpiry.getMinutes() + 10); // 10 minutes expiry
+
+  // Create tenant with status 'pending' (US-A2-02)
+  const tenant = await Tenant.create({
+    name: tenantName.trim(),
+    code: code.toUpperCase().trim(),
+    location: location || '',
+    status: 'pending', // Will be activated after Platform Admin approval
+    registrationEmail: adminEmail.toLowerCase().trim(),
+    registrationOtpHash: otpHash,
+    registrationOtpExpiry: otpExpiry,
+    emailVerified: false,
+  });
+
+  // Send OTP email (US-A2-01)
+  try {
+    await sendNotification({
+      tenantId: null, // No tenant yet
+      recipientEmail: adminEmail,
+      recipientName: adminName || 'Tenant Administrator',
+      subject: 'Verify Your Email - Tenant Registration',
+      message: `Your OTP for tenant registration is: ${otp}. This code expires in 10 minutes.`,
+      html: `
+        <p>Dear ${adminName || 'Tenant Administrator'},</p>
+        <p>Thank you for registering your tenant "${tenantName}".</p>
+        <p>Your verification code is: <strong style="font-size: 24px; letter-spacing: 4px;">${otp}</strong></p>
+        <p>This code will expire in 10 minutes.</p>
+        <p>After verification, your registration will be reviewed by our Platform Admin team.</p>
+        <p>If you didn't request this registration, please ignore this email.</p>
+      `,
+    });
+  } catch (emailError) {
+    console.error('Failed to send OTP email:', emailError);
+    // Don't fail registration if email fails, but log it
+  }
+
+  // Create audit log
+  await AuditLog.create({
+    tenantId: null,
+    userId: null,
+    userName: adminEmail,
+    userEmail: adminEmail,
+    action: 'Tenant Registration Initiated',
+    module: 'Authentication',
+    entityType: 'Tenant',
+    entityId: tenant._id,
+    details: `Tenant registration initiated: ${tenantName} (${code})`,
+    ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+    userAgent: req.get('user-agent') || 'Unknown',
+    status: 'Pending',
+  });
+
+  res.status(201).json({
+    success: true,
+    message: 'Registration OTP sent to your email. Please verify to complete registration.',
+    tenantId: tenant._id.toString(),
+    requiresOTPVerification: true,
+  });
+});
+
+// @desc    Verify registration OTP (US-A2-01)
+// @route   POST /api/auth/verify-registration-otp
+// @access  Public
+exports.verifyRegistrationOTP = asyncHandler(async (req, res) => {
+  const { tenantId, otp, adminPassword, adminName } = req.body;
+
+  if (!tenantId || !otp) {
+    return res.status(400).json({
+      success: false,
+      message: 'Tenant ID and OTP are required',
+    });
+  }
+
+  const tenant = await Tenant.findById(tenantId);
+  if (!tenant) {
+    return res.status(404).json({
+      success: false,
+      message: 'Tenant registration not found',
+    });
+  }
+
+  // Check if OTP is expired
+  if (!tenant.registrationOtpExpiry || tenant.registrationOtpExpiry < new Date()) {
+    return res.status(400).json({
+      success: false,
+      message: 'OTP has expired. Please request a new registration.',
+    });
+  }
+
+  // Verify OTP
+  const otpHash = hashOTP(otp);
+  if (otpHash !== tenant.registrationOtpHash) {
+    // Increment failure counter (if exists)
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid OTP code',
+    });
+  }
+
+  // OTP verified - mark email as verified
+  tenant.emailVerified = true;
+  tenant.registrationOtpHash = undefined;
+  tenant.registrationOtpExpiry = undefined;
+  await tenant.save();
+
+  // Create admin user (but don't activate yet - wait for Platform Admin approval)
+  if (adminPassword) {
     const adminUser = await User.create({
-      email: adminEmail,
+      email: tenant.registrationEmail,
       password: adminPassword,
       name: adminName || 'Tenant Administrator',
       tenantId: tenant._id,
       role: 'Tenant Admin',
+      status: 'Pending Activation', // Will be activated after Platform Admin approval
     });
 
-    const token = generateToken(adminUser._id);
-
-    res.status(201).json({
-      success: true,
-      message: 'Tenant registered successfully',
-      token,
-      tenant: {
-        id: tenant._id,
-        name: tenant.name,
-        code: tenant.code,
-      },
-      user: {
-        id: adminUser._id,
-        email: adminUser.email,
-        name: adminUser.name,
-        role: adminUser.role,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Server error',
-      error: error.message,
-    });
+    // Notify Platform Admin of pending registration (US-A2-02)
+    try {
+      const platformAdmins = await User.find({ role: 'Super Admin' });
+      for (const admin of platformAdmins) {
+        await sendNotification({
+          tenantId: null,
+          recipientEmail: admin.email,
+          recipientName: admin.name,
+          subject: 'New Tenant Registration Pending Approval',
+          message: `A new tenant "${tenant.name}" (${tenant.code}) has registered and requires your approval.`,
+          html: `
+            <p>Dear ${admin.name},</p>
+            <p>A new tenant registration requires your approval:</p>
+            <ul>
+              <li><strong>Tenant Name:</strong> ${tenant.name}</li>
+              <li><strong>Tenant Code:</strong> ${tenant.code}</li>
+              <li><strong>Location:</strong> ${tenant.location}</li>
+              <li><strong>Admin Email:</strong> ${tenant.registrationEmail}</li>
+              <li><strong>Registration Time:</strong> ${tenant.createdAt}</li>
+            </ul>
+            <p>Please review and approve or reject this registration from the Platform Admin dashboard.</p>
+          `,
+        });
+      }
+    } catch (notifError) {
+      console.error('Failed to notify Platform Admin:', notifError);
+    }
   }
-};
+
+  await AuditLog.create({
+    tenantId: tenant._id,
+    userId: null,
+    userName: tenant.registrationEmail,
+    userEmail: tenant.registrationEmail,
+    action: 'Registration OTP Verified',
+    module: 'Authentication',
+    entityType: 'Tenant',
+    entityId: tenant._id,
+    details: 'Email OTP verified, pending Platform Admin approval',
+    ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+    userAgent: req.get('user-agent') || 'Unknown',
+    status: 'Pending Approval',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Email verified successfully. Your registration is pending Platform Admin approval. You will be notified once approved.',
+    tenantId: tenant._id.toString(),
+  });
+});
 
 // @desc    Forgot password
 // @route   POST /api/auth/forgot-password

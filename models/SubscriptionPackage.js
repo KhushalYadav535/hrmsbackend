@@ -34,6 +34,18 @@ const subscriptionPackageSchema = new mongoose.Schema({
     default: true,
     index: true,
   },
+  // US-A5-02: Archive functionality - archived plans preserved for history but hidden from new assignment
+  isArchived: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  archivedAt: {
+    type: Date,
+  },
+  archivedBy: {
+    type: String,
+  },
   
   // Pricing
   monthlyPrice: {

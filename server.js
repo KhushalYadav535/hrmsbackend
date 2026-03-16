@@ -92,6 +92,8 @@ app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api/departments', require('./routes/departments'));
 app.use('/api/designations', require('./routes/designations'));
+app.use('/api/locations', require('./routes/locations')); // Spec C1-02: Location Master
+app.use('/api/grades', require('./routes/grades')); // Spec C1-03: Grade Master
 app.use('/api/role-permissions', require('./routes/rolePermissions'));
 app.use('/api/audit-logs', require('./routes/auditLogs'));
 app.use('/api/bonuses', require('./routes/bonuses'));
@@ -107,7 +109,8 @@ app.use('/api/overtime', require('./routes/overtime')); // BRD: BR-P1-002 - Over
 app.use('/api/weekly-off', require('./routes/weeklyOff')); // BRD: BR-P1-002 - Weekly Off Configuration
 app.use('/api/biometric', require('./routes/biometric')); // BRD: BR-P1-002 - Biometric Integration
 app.use('/api/lms', require('./routes/lms')); // BRD: BR-P1-005 - Learning Management System
-app.use('/api/transfers', require('./routes/transfers')); // BRD: BR-P2-003 - Transfer Management
+app.use('/api/transfers', require('./routes/transfers')); // BRD: BR-P2-003 - Leave/Travel Transfer Management
+app.use('/api/employee-transfers', require('./routes/employeeTransfers')); // Employee Organization Unit Transfers
 app.use('/api/onboarding', require('./routes/onboarding'));
 app.use('/api/grievances', require('./routes/grievances')); // BRD: BR-P1-004 - Grievance Management
 app.use('/api/salary-structures', require('./routes/salaryStructures'));
@@ -128,6 +131,8 @@ app.use('/api/delegations', require('./routes/delegation'));
 app.use('/api/access-certification', require('./routes/accessCertification'));
 app.use('/api/ldap', require('./routes/ldap'));
 app.use('/api/org', require('./routes/organizationUnits'));
+app.use('/api/positions', require('./routes/positions')); // Position Management
+app.use('/api/reports/branch', require('./routes/branchReports')); // Branch-wise Reports
 app.use('/api', require('./routes/moduleManagement')); // Module Management routes
 app.use('/api/platform-admin', require('./routes/platformAdmin')); // Super Admin: packages, integrations, settings, analytics
 app.use('/api/profile-update-requests', require('./routes/profileUpdateRequests')); // BRD: BR-P2-005 - ESS Profile update requests

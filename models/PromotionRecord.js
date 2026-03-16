@@ -27,11 +27,38 @@ const promotionRecordSchema = new mongoose.Schema({
     previousGrade: { type: String },
     previousSalary: { type: Number },
     previousDepartment: { type: String },
+    previousPostingUnitId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'OrganizationUnit',
+        index: true,
+        comment: 'Previous branch/unit where employee was posted',
+    },
+    previousLocation: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Location',
+        comment: 'Previous location',
+    },
     // After promotion
     newDesignation: { type: String, required: true },
     newGrade: { type: String },
     newSalary: { type: Number },
     newDepartment: { type: String },
+    newPostingUnitId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'OrganizationUnit',
+        comment: 'New branch/unit where employee will be posted (if promotion includes transfer)',
+    },
+    newLocation: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Location',
+        comment: 'New location (auto-filled from branch if provided)',
+    },
+    // Promotion with Transfer flag
+    includesTransfer: {
+        type: Boolean,
+        default: false,
+        comment: 'BR-HRMS-01: Promotion includes branch transfer',
+    },
     salaryIncrement: { type: Number, default: 0 },
     incrementPercentage: { type: Number, default: 0 },
     // Dates
@@ -91,6 +118,9 @@ const promotionRecordSchema = new mongoose.Schema({
 
 promotionRecordSchema.index({ tenantId: 1, employeeId: 1, effectiveDate: -1 });
 promotionRecordSchema.index({ tenantId: 1, status: 1 });
+promotionRecordSchema.index({ tenantId: 1, previousPostingUnitId: 1 });
+promotionRecordSchema.index({ tenantId: 1, newPostingUnitId: 1 });
+promotionRecordSchema.index({ tenantId: 1, includesTransfer: 1 });
 
 promotionRecordSchema.pre('save', function (next) {
     this.updatedAt = Date.now();

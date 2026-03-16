@@ -14,6 +14,7 @@
     "seed-tenant-users": "node scripts/seedTenantUsers.js",
     "delete-salary": "node scripts/deleteSalaryStructures.js",
     "delete-tenant-users": "node scripts/deleteTenantUsers.js",
+    "delete-tenants-except-indian-bank": "node scripts/deleteAllTenantsExceptIndianBank.js",
     "test-vps": "node scripts/testVPSConnection.js",
     "test-vps-detailed": "node scripts/testVPSConnectionDetailed.js",
     "setup-mongo-user": "node scripts/setupMongoDBUser.js",

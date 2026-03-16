@@ -4,11 +4,14 @@ const {
   getHierarchy,
   getOrganizationUnits,
   getOrganizationUnit,
-  getChildren,
+  getOrganizationUnitChildren,
   getUnitEmployees,
   createOrganizationUnit,
   updateOrganizationUnit,
   deleteOrganizationUnit,
+  mergeUnits,
+  seedSampleData,
+  deleteSeedData,
 } = require('../controllers/organizationUnitController');
 const { protect, authorize } = require('../middleware/auth');
 const { setTenant } = require('../middleware/tenant');
@@ -26,6 +29,10 @@ router
   .get(getOrganizationUnits)
   .post(authorize('Tenant Admin', 'Super Admin'), createOrganizationUnit);
 
+// Seed sample data routes (must come before /units/:id to avoid route conflict)
+router.post('/units/seed', authorize('Tenant Admin', 'Super Admin'), seedSampleData);
+router.delete('/units/seed', authorize('Tenant Admin', 'Super Admin'), deleteSeedData);
+
 router
   .route('/units/:id')
   .get(getOrganizationUnit)
@@ -33,7 +40,10 @@ router
   .delete(authorize('Tenant Admin', 'Super Admin'), deleteOrganizationUnit);
 
 // Nested routes
-router.get('/units/:id/children', getChildren);
+router.get('/units/:id/children', getOrganizationUnitChildren);
 router.get('/units/:id/employees', getUnitEmployees);
+
+// Merge route
+router.post('/units/:id/merge', authorize('Tenant Admin', 'Super Admin'), mergeUnits);
 
 module.exports = router;

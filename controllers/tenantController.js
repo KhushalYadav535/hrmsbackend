@@ -1,6 +1,7 @@
 const Tenant = require('../models/Tenant');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
+const asyncHandler = require('../middleware/errorHandler').asyncHandler;
 
 // @desc    Create tenant (Super Admin only) - same as register-tenant: creates tenant + Tenant Admin user
 // @route   POST /api/tenants
@@ -113,8 +114,14 @@ exports.getTenants = async (req, res) => {
           location: t.location,
           employees: t.employees,
           status: t.status,
-          adminEmail: admin ? admin.email : '',
+          adminEmail: admin ? admin.email : (t.registrationEmail || ''),
           adminName: admin ? admin.name : '',
+          registrationEmail: t.registrationEmail,
+          emailVerified: t.emailVerified,
+          createdAt: t.createdAt,
+          approvedBy: t.approvedBy,
+          approvedAt: t.approvedAt,
+          rejectionReason: t.rejectionReason,
         };
       }),
     });
@@ -126,6 +133,435 @@ exports.getTenants = async (req, res) => {
     });
   }
 };
+
+// @desc    Approve tenant registration (US-A2-02)
+// @route   POST /api/tenants/:id/approve
+// @access  Private (Super Admin)
+exports.approveTenant = asyncHandler(async (req, res) => {
+  const tenant = await Tenant.findById(req.params.id);
+  
+  if (!tenant) {
+    return res.status(404).json({
+      success: false,
+      message: 'Tenant not found',
+    });
+  }
+
+  if (tenant.status !== 'pending') {
+    return res.status(400).json({
+      success: false,
+      message: `Tenant is already ${tenant.status}. Cannot approve.`,
+    });
+  }
+
+  // Activate tenant
+  tenant.status = 'active';
+  tenant.approvedBy = req.user._id;
+  tenant.approvedAt = new Date();
+  await tenant.save();
+
+  // Activate Tenant Admin user
+  const adminUser = await User.findOne({ 
+    tenantId: tenant._id, 
+    email: tenant.registrationEmail 
+  });
+  if (adminUser) {
+    adminUser.status = 'Active';
+    await adminUser.save();
+  }
+
+  // Send welcome email to tenant admin
+  try {
+    const { sendNotification } = require('../utils/notificationService');
+    await sendNotification({
+      tenantId: tenant._id,
+      recipientEmail: tenant.registrationEmail,
+      recipientName: adminUser?.name || 'Tenant Administrator',
+      subject: 'Tenant Registration Approved - Welcome!',
+      message: `Your tenant registration for "${tenant.name}" has been approved. You can now log in to the HRMS platform.`,
+      html: `
+        <p>Dear ${adminUser?.name || 'Tenant Administrator'},</p>
+        <p>Congratulations! Your tenant registration for <strong>${tenant.name}</strong> (${tenant.code}) has been approved.</p>
+        <p>You can now log in to the HRMS platform using your registered email: <strong>${tenant.registrationEmail}</strong></p>
+        <p>Welcome to Indian Bank HRMS!</p>
+      `,
+    });
+  } catch (emailError) {
+    console.error('Failed to send approval email:', emailError);
+  }
+
+  // Audit log
+  await AuditLog.create({
+    tenantId: tenant._id,
+    userId: req.user._id,
+    userName: req.user.name || req.user.email,
+    userEmail: req.user.email,
+    action: 'Tenant Approved',
+    module: 'Tenant Management',
+    entityType: 'Tenant',
+    entityId: tenant._id,
+    details: `Tenant "${tenant.name}" (${tenant.code}) approved by Platform Admin`,
+    ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+    userAgent: req.get('user-agent') || 'Unknown',
+    status: 'Success',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Tenant approved successfully',
+    data: tenant,
+  });
+});
+
+// @desc    Reject tenant registration (US-A2-02)
+// @route   POST /api/tenants/:id/reject
+// @access  Private (Super Admin)
+exports.rejectTenant = asyncHandler(async (req, res) => {
+  const { reason } = req.body;
+
+  if (!reason || reason.trim().length < 20) {
+    return res.status(400).json({
+      success: false,
+      message: 'Rejection reason is required and must be at least 20 characters',
+    });
+  }
+
+  const tenant = await Tenant.findById(req.params.id);
+  
+  if (!tenant) {
+    return res.status(404).json({
+      success: false,
+      message: 'Tenant not found',
+    });
+  }
+
+  if (tenant.status !== 'pending') {
+    return res.status(400).json({
+      success: false,
+      message: `Tenant is already ${tenant.status}. Cannot reject.`,
+    });
+  }
+
+  // Reject tenant
+  tenant.status = 'rejected';
+  tenant.rejectionReason = reason.trim();
+  await tenant.save();
+
+  // Send rejection email
+  try {
+    const { sendNotification } = require('../utils/notificationService');
+    await sendNotification({
+      tenantId: null,
+      recipientEmail: tenant.registrationEmail,
+      recipientName: 'Tenant Administrator',
+      subject: 'Tenant Registration Rejected',
+      message: `Your tenant registration for "${tenant.name}" has been rejected. Reason: ${reason}`,
+      html: `
+        <p>Dear Tenant Administrator,</p>
+        <p>We regret to inform you that your tenant registration for <strong>${tenant.name}</strong> (${tenant.code}) has been rejected.</p>
+        <p><strong>Reason:</strong> ${reason}</p>
+        <p>If you have any questions, please contact our support team.</p>
+      `,
+    });
+  } catch (emailError) {
+    console.error('Failed to send rejection email:', emailError);
+  }
+
+  // Audit log
+  await AuditLog.create({
+    tenantId: null,
+    userId: req.user._id,
+    userName: req.user.name || req.user.email,
+    userEmail: req.user.email,
+    action: 'Tenant Rejected',
+    module: 'Tenant Management',
+    entityType: 'Tenant',
+    entityId: tenant._id,
+    details: `Tenant "${tenant.name}" (${tenant.code}) rejected. Reason: ${reason}`,
+    ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+    userAgent: req.get('user-agent') || 'Unknown',
+    status: 'Rejected',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Tenant rejected successfully',
+    data: tenant,
+  });
+});
+
+// @desc    Suspend tenant (US-A4-01)
+// @route   POST /api/tenants/:id/suspend
+// @access  Private (Super Admin)
+exports.suspendTenant = asyncHandler(async (req, res) => {
+  const { reason } = req.body;
+
+  if (!reason || reason.trim().length < 20) {
+    return res.status(400).json({
+      success: false,
+      message: 'Suspension reason is required and must be at least 20 characters',
+    });
+  }
+
+  const tenant = await Tenant.findById(req.params.id);
+  
+  if (!tenant) {
+    return res.status(404).json({
+      success: false,
+      message: 'Tenant not found',
+    });
+  }
+
+  if (tenant.status === 'suspended') {
+    return res.status(400).json({
+      success: false,
+      message: 'Tenant is already suspended',
+    });
+  }
+
+  if (tenant.status === 'rejected' || tenant.status === 'pending') {
+    return res.status(400).json({
+      success: false,
+      message: `Cannot suspend tenant with status: ${tenant.status}`,
+    });
+  }
+
+  // Suspend tenant
+  tenant.status = 'suspended';
+  tenant.suspendedBy = req.user._id;
+  tenant.suspendedAt = new Date();
+  tenant.suspensionReason = reason.trim();
+  await tenant.save();
+
+  // Lock all users for this tenant
+  await User.updateMany(
+    { tenantId: tenant._id },
+    { 
+      accountLockedUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // Lock for 1 year
+      status: 'Inactive'
+    }
+  );
+
+  // Send suspension email
+  try {
+    const { sendNotification } = require('../utils/notificationService');
+    const adminUser = await User.findOne({ tenantId: tenant._id, role: 'Tenant Admin' });
+    if (adminUser) {
+      await sendNotification({
+        tenantId: tenant._id,
+        recipientEmail: adminUser.email,
+        recipientName: adminUser.name,
+        subject: 'Tenant Account Suspended',
+        message: `Your tenant account "${tenant.name}" has been suspended. Reason: ${reason}`,
+        html: `
+          <p>Dear ${adminUser.name},</p>
+          <p>We regret to inform you that your tenant account <strong>${tenant.name}</strong> (${tenant.code}) has been suspended.</p>
+          <p><strong>Reason:</strong> ${reason}</p>
+          <p>All user accounts for this tenant have been locked. Please contact support for assistance.</p>
+        `,
+      });
+    }
+  } catch (emailError) {
+    console.error('Failed to send suspension email:', emailError);
+  }
+
+  // Audit log
+  await AuditLog.create({
+    tenantId: null,
+    userId: req.user._id,
+    userName: req.user.name || req.user.email,
+    userEmail: req.user.email,
+    action: 'Suspend',
+    module: 'Tenant Management',
+    entityType: 'Tenant',
+    entityId: tenant._id,
+    details: `Tenant "${tenant.name}" (${tenant.code}) suspended. Reason: ${reason}`,
+    ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+    userAgent: req.get('user-agent') || 'Unknown',
+    status: 'Success',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Tenant suspended successfully',
+    data: tenant,
+  });
+});
+
+// @desc    Deactivate tenant (US-A4-01)
+// @route   POST /api/tenants/:id/deactivate
+// @access  Private (Super Admin)
+exports.deactivateTenant = asyncHandler(async (req, res) => {
+  const { reason } = req.body;
+
+  if (!reason || reason.trim().length < 20) {
+    return res.status(400).json({
+      success: false,
+      message: 'Deactivation reason is required and must be at least 20 characters',
+    });
+  }
+
+  const tenant = await Tenant.findById(req.params.id);
+  
+  if (!tenant) {
+    return res.status(404).json({
+      success: false,
+      message: 'Tenant not found',
+    });
+  }
+
+  if (tenant.status === 'inactive') {
+    return res.status(400).json({
+      success: false,
+      message: 'Tenant is already deactivated',
+    });
+  }
+
+  // Deactivate tenant
+  tenant.status = 'inactive';
+  tenant.deactivatedBy = req.user._id;
+  tenant.deactivatedAt = new Date();
+  tenant.deactivationReason = reason.trim();
+  await tenant.save();
+
+  // Lock all users for this tenant
+  await User.updateMany(
+    { tenantId: tenant._id },
+    { 
+      accountLockedUntil: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000), // Lock for 1 year
+      status: 'Inactive'
+    }
+  );
+
+  // Send deactivation email
+  try {
+    const { sendNotification } = require('../utils/notificationService');
+    const adminUser = await User.findOne({ tenantId: tenant._id, role: 'Tenant Admin' });
+    if (adminUser) {
+      await sendNotification({
+        tenantId: tenant._id,
+        recipientEmail: adminUser.email,
+        recipientName: adminUser.name,
+        subject: 'Tenant Account Deactivated',
+        message: `Your tenant account "${tenant.name}" has been deactivated. Reason: ${reason}`,
+        html: `
+          <p>Dear ${adminUser.name},</p>
+          <p>We regret to inform you that your tenant account <strong>${tenant.name}</strong> (${tenant.code}) has been deactivated.</p>
+          <p><strong>Reason:</strong> ${reason}</p>
+          <p>All user accounts for this tenant have been locked. Please contact support for assistance.</p>
+        `,
+      });
+    }
+  } catch (emailError) {
+    console.error('Failed to send deactivation email:', emailError);
+  }
+
+  // Audit log
+  await AuditLog.create({
+    tenantId: null,
+    userId: req.user._id,
+    userName: req.user.name || req.user.email,
+    userEmail: req.user.email,
+    action: 'Deactivate',
+    module: 'Tenant Management',
+    entityType: 'Tenant',
+    entityId: tenant._id,
+    details: `Tenant "${tenant.name}" (${tenant.code}) deactivated. Reason: ${reason}`,
+    ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+    userAgent: req.get('user-agent') || 'Unknown',
+    status: 'Success',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Tenant deactivated successfully',
+    data: tenant,
+  });
+});
+
+// @desc    Reactivate tenant (US-A4-01)
+// @route   POST /api/tenants/:id/reactivate
+// @access  Private (Super Admin)
+exports.reactivateTenant = asyncHandler(async (req, res) => {
+  const tenant = await Tenant.findById(req.params.id);
+  
+  if (!tenant) {
+    return res.status(404).json({
+      success: false,
+      message: 'Tenant not found',
+    });
+  }
+
+  if (tenant.status === 'active') {
+    return res.status(400).json({
+      success: false,
+      message: 'Tenant is already active',
+    });
+  }
+
+  // Reactivate tenant
+  tenant.status = 'active';
+  tenant.suspendedBy = undefined;
+  tenant.suspendedAt = undefined;
+  tenant.suspensionReason = undefined;
+  tenant.deactivatedBy = undefined;
+  tenant.deactivatedAt = undefined;
+  tenant.deactivationReason = undefined;
+  await tenant.save();
+
+  // Unlock all users for this tenant
+  await User.updateMany(
+    { tenantId: tenant._id },
+    { 
+      accountLockedUntil: null,
+      status: 'Active'
+    }
+  );
+
+  // Send reactivation email
+  try {
+    const { sendNotification } = require('../utils/notificationService');
+    const adminUser = await User.findOne({ tenantId: tenant._id, role: 'Tenant Admin' });
+    if (adminUser) {
+      await sendNotification({
+        tenantId: tenant._id,
+        recipientEmail: adminUser.email,
+        recipientName: adminUser.name,
+        subject: 'Tenant Account Reactivated',
+        message: `Your tenant account "${tenant.name}" has been reactivated.`,
+        html: `
+          <p>Dear ${adminUser.name},</p>
+          <p>We are pleased to inform you that your tenant account <strong>${tenant.name}</strong> (${tenant.code}) has been reactivated.</p>
+          <p>All user accounts for this tenant have been unlocked. You can now access the system.</p>
+        `,
+      });
+    }
+  } catch (emailError) {
+    console.error('Failed to send reactivation email:', emailError);
+  }
+
+  // Audit log
+  await AuditLog.create({
+    tenantId: null,
+    userId: req.user._id,
+    userName: req.user.name || req.user.email,
+    userEmail: req.user.email,
+    action: 'Reactivate',
+    module: 'Tenant Management',
+    entityType: 'Tenant',
+    entityId: tenant._id,
+    details: `Tenant "${tenant.name}" (${tenant.code}) reactivated`,
+    ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+    userAgent: req.get('user-agent') || 'Unknown',
+    status: 'Success',
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Tenant reactivated successfully',
+    data: tenant,
+  });
+});
 
 // @desc    Get single tenant
 // @route   GET /api/tenants/:id

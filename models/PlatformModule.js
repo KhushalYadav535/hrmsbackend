@@ -25,9 +25,31 @@ const platformModuleSchema = new mongoose.Schema({
     enum: ['CORE', 'STANDARD', 'ADVANCED', 'INTEGRATION'],
     index: true,
   },
+  // US-A5-01: Module Description (required, min 50 chars, max 500 chars)
   description: {
     type: String,
+    required: true,
     trim: true,
+    minlength: 50,
+    maxlength: 500,
+    validate: {
+      validator: function(v) {
+        // BR-A5-01: Description required, min 50 chars, max 500 chars
+        return v && v.trim().length >= 50 && v.trim().length <= 500;
+      },
+      message: 'Description must be between 50 and 500 characters'
+    }
+  },
+  // US-A5-01: Key Features sub-list (max 5 bullets)
+  keyFeatures: {
+    type: [String],
+    default: [],
+    validate: {
+      validator: function(v) {
+        return v.length <= 5;
+      },
+      message: 'Maximum 5 key features allowed'
+    }
   },
   icon: {
     type: String,

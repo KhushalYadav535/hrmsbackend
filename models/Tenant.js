@@ -17,10 +17,12 @@ const tenantSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  // Spec A2/A4: Expanded statuses for registration workflow + suspension
   status: {
     type: String,
-    enum: ['active', 'inactive'],
+    enum: ['active', 'inactive', 'pending', 'suspended', 'rejected'],
     default: 'active',
+    index: true,
   },
   employees: {
     type: Number,
@@ -31,6 +33,50 @@ const tenantSchema = new mongoose.Schema({
     of: mongoose.Schema.Types.Mixed,
     default: {},
   },
+  // Spec A2-01: Registration tracking
+  registrationEmail: {
+    type: String,
+    lowercase: true,
+    trim: true,
+  },
+  registrationOtpHash: String,
+  registrationOtpExpiry: Date,
+  emailVerified: {
+    type: Boolean,
+    default: false,
+  },
+  // Spec A2-02: Approval workflow
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  approvedAt: Date,
+  rejectionReason: String,
+  // Spec A4-01: Suspension/Deactivation tracking
+  suspendedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  suspendedAt: Date,
+  suspensionReason: {
+    type: String,
+    minlength: 20,
+  },
+  deactivatedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
+  deactivatedAt: Date,
+  deactivationReason: {
+    type: String,
+    minlength: 20,
+  },
+  // Subscription tracking
+  subscriptionPlanId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SubscriptionPackage',
+  },
+  subscriptionExpiryDate: Date,
   createdAt: {
     type: Date,
     default: Date.now,

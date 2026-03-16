@@ -27,6 +27,7 @@ const organizationUnitSchema = new mongoose.Schema({
           'ZO': /^ZO-[A-Z]{3,6}-\d{2}$/, // ZO-SOUTH-01, ZO-MUM-01
           'RO': /^RO-[A-Z0-9]{4,6}$/,   // RO-MUM1, RO-DEL01
           'BRANCH': /^BR-\d{6}$/,       // BR-000001
+          'DEPARTMENT': /^DEPT-[A-Z0-9]{3,10}$/, // DEPT-HR, DEPT-FIN01
         };
         return codePatterns[this.unitType] ? codePatterns[this.unitType].test(value) : true;
       },
@@ -42,7 +43,7 @@ const organizationUnitSchema = new mongoose.Schema({
   },
   unitType: {
     type: String,
-    enum: ['HO', 'ZO', 'RO', 'BRANCH'],
+    enum: ['HO', 'ZO', 'RO', 'BRANCH', 'DEPARTMENT'],
     required: true,
     index: true,
     comment: 'Type of organizational unit',
@@ -101,6 +102,32 @@ const organizationUnitSchema = new mongoose.Schema({
     },
     comment: 'PIN code (6 digits)',
   },
+  // Branch-specific fields (for BRANCH type)
+  branchCode: {
+    type: String,
+    trim: true,
+    uppercase: true,
+    comment: 'Branch Code / IFSC (e.g., IBKL0000001)',
+  },
+  branchType: {
+    type: String,
+    enum: ['Urban', 'Semi-Urban', 'Rural'],
+    comment: 'Branch type classification',
+  },
+  openingDate: {
+    type: Date,
+    comment: 'Branch opening date',
+  },
+  // Zone/Region-specific fields
+  headquartersCity: {
+    type: String,
+    trim: true,
+    comment: 'Headquarters city for Zone/Region',
+  },
+  effectiveDate: {
+    type: Date,
+    comment: 'Effective date for unit activation',
+  },
   isActive: {
     type: Boolean,
     default: true,
@@ -135,34 +162,27 @@ organizationUnitSchema.virtual('hierarchyPath', {
 });
 
 // Pre-save hook to validate hierarchy
-organizationUnitSchema.pre('save', async function(next) {
+organizationUnitSchema.pre('save', async function() {
   // Validate parent unit exists and is correct type
   if (this.parentUnitId && this.unitType !== 'HO') {
-    try {
-      const parentUnit = await mongoose.model('OrganizationUnit').findById(this.parentUnitId);
-      if (!parentUnit) {
-        return next(new Error('Parent unit not found'));
-      }
-      
-      // Validate hierarchy: ZO → HO, RO → ZO, BRANCH → RO
-      const validHierarchy = {
-        'ZO': ['HO'],
-        'RO': ['ZO'],
-        'BRANCH': ['RO'],
-      };
-      
-      if (validHierarchy[this.unitType] && !validHierarchy[this.unitType].includes(parentUnit.unitType)) {
-        return next(new Error(`Invalid hierarchy: ${this.unitType} cannot be under ${parentUnit.unitType}`));
-      }
-    } catch (error) {
-      return next(error);
+    const parentUnit = await mongoose.model('OrganizationUnit').findById(this.parentUnitId);
+    if (!parentUnit) {
+      throw new Error('Parent unit not found');
+    }
+    
+    // Validate hierarchy: ZO → HO, RO → ZO, BRANCH → RO or ZO
+    const validHierarchy = {
+      'ZO': ['HO'],
+      'RO': ['ZO'],
+      'BRANCH': ['RO', 'ZO'], // Branch can be under Region or Zone
+    };
+    
+    if (validHierarchy[this.unitType] && !validHierarchy[this.unitType].includes(parentUnit.unitType)) {
+      throw new Error(`Invalid hierarchy: ${this.unitType} cannot be under ${parentUnit.unitType}`);
     }
   }
   
   this.updatedAt = Date.now();
-  if (typeof next === 'function') {
-    next();
-  }
 });
 
 // Method to get all child units

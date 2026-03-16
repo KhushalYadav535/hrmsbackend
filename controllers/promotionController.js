@@ -6,10 +6,17 @@ const { sendNotification } = require('../utils/notificationService');
 /** GET all promotion records */
 exports.getPromotions = async (req, res) => {
     try {
-        const { employeeId, status, fromDate, toDate } = req.query;
+        const { employeeId, status, fromDate, toDate, postingUnitId } = req.query;
         const filter = { tenantId: req.tenantId };
         if (employeeId) filter.employeeId = employeeId;
         if (status) filter.status = status;
+        if (postingUnitId) {
+            // Filter by either previous or new posting unit
+            filter.$or = [
+                { previousPostingUnitId: postingUnitId },
+                { newPostingUnitId: postingUnitId },
+            ];
+        }
         if (fromDate || toDate) {
             filter.effectiveDate = {};
             if (fromDate) filter.effectiveDate.$gte = new Date(fromDate);
@@ -17,7 +24,9 @@ exports.getPromotions = async (req, res) => {
         }
 
         const records = await PromotionRecord.find(filter)
-            .populate('employeeId', 'firstName lastName employeeCode department designation')
+            .populate('employeeId', 'firstName lastName employeeCode department designation postingUnitId')
+            .populate('previousPostingUnitId', 'unitCode unitName unitType')
+            .populate('newPostingUnitId', 'unitCode unitName unitType')
             .populate('hrRecommendedBy', 'name email')
             .populate('managementApprovedBy', 'name email')
             .populate('createdBy', 'name email')
@@ -33,7 +42,11 @@ exports.getPromotions = async (req, res) => {
 exports.getPromotion = async (req, res) => {
     try {
         const record = await PromotionRecord.findOne({ _id: req.params.id, tenantId: req.tenantId })
-            .populate('employeeId', 'firstName lastName employeeCode department designation email')
+            .populate('employeeId', 'firstName lastName employeeCode department designation email postingUnitId')
+            .populate('previousPostingUnitId', 'unitCode unitName unitType state city')
+            .populate('newPostingUnitId', 'unitCode unitName unitType state city')
+            .populate('previousLocation', 'name city state')
+            .populate('newLocation', 'name city state')
             .populate('hrRecommendedBy managementApprovedBy rejectedBy createdBy', 'name email');
 
         if (!record) return res.status(404).json({ success: false, message: 'Promotion record not found' });
@@ -51,27 +64,74 @@ exports.createPromotion = async (req, res) => {
             previousDesignation, previousGrade, previousSalary, previousDepartment,
             newDesignation, newGrade, newSalary, newDepartment,
             effectiveDate, justification, appraisalRating, appraisalCycleId,
+            // BR-HRMS-01: Branch-wise promotion fields
+            newPostingUnitId, previousPostingUnitId,
+            includesTransfer, newLocation,
         } = req.body;
 
         if (!employeeId || !promotionType || !newDesignation || !effectiveDate || !justification) {
             return res.status(400).json({ success: false, message: 'Required fields missing' });
         }
 
-        const employee = await Employee.findOne({ _id: employeeId, tenantId: req.tenantId });
+        const employee = await Employee.findOne({ _id: employeeId, tenantId: req.tenantId })
+            .populate('postingUnitId', 'unitCode unitName unitType')
+            .populate('location');
         if (!employee) return res.status(404).json({ success: false, message: 'Employee not found' });
+
+        // Get current posting unit if not provided
+        const currentPostingUnitId = previousPostingUnitId || employee.postingUnitId;
+        const currentLocation = employee.location;
+        
+        // BR-HRMS-01: If promotion includes transfer, validate new unit
+        let finalNewPostingUnitId = currentPostingUnitId;
+        let finalNewLocation = currentLocation;
+        
+        if (includesTransfer && newPostingUnitId) {
+            const OrganizationUnit = require('../models/OrganizationUnit');
+            const newUnit = await OrganizationUnit.findOne({
+                _id: newPostingUnitId,
+                tenantId: req.tenantId,
+                isActive: true,
+            });
+            if (!newUnit) {
+                return res.status(400).json({ success: false, message: 'New posting unit not found or inactive' });
+            }
+            
+            finalNewPostingUnitId = newPostingUnitId;
+            
+            // Auto-fill location from branch if not provided
+            if (!newLocation && newUnit.unitType === 'BRANCH') {
+                const Location = require('../models/Location');
+                const branchLocation = await Location.findOne({
+                    tenantId: req.tenantId,
+                    branchId: newPostingUnitId,
+                    status: 'Active',
+                });
+                if (branchLocation) {
+                    finalNewLocation = branchLocation._id;
+                }
+            } else if (newLocation) {
+                finalNewLocation = newLocation;
+            }
+        }
 
         const promotion = await PromotionRecord.create({
             tenantId: req.tenantId,
             employeeId,
             promotionType,
-            previousDesignation: previousDesignation || employee.designation,
+            previousDesignation: previousDesignation || (typeof employee.designation === 'object' ? employee.designation.name : employee.designation),
             previousGrade: previousGrade || employee.grade,
-            previousSalary,
+            previousSalary: previousSalary || employee.salary,
             previousDepartment: previousDepartment || employee.department,
+            previousPostingUnitId: currentPostingUnitId?._id || currentPostingUnitId,
+            previousLocation: currentLocation?._id || currentLocation,
             newDesignation,
             newGrade,
             newSalary,
             newDepartment: newDepartment || employee.department,
+            newPostingUnitId: finalNewPostingUnitId?._id || finalNewPostingUnitId,
+            newLocation: finalNewLocation?._id || finalNewLocation,
+            includesTransfer: includesTransfer || false,
             effectiveDate: new Date(effectiveDate),
             justification,
             appraisalRating,
@@ -117,13 +177,74 @@ exports.approvePromotion = async (req, res) => {
 
         // Update employee record if effective date is today or past
         if (new Date(promotion.effectiveDate) <= new Date()) {
-            await Employee.findByIdAndUpdate(promotion.employeeId._id, {
+            const updateData = {
                 designation: promotion.newDesignation,
-                ...(promotion.newGrade && { grade: promotion.newGrade }),
-                ...(promotion.newDepartment && { department: promotion.newDepartment }),
-            });
+            };
+            
+            if (promotion.newGrade) updateData.grade = promotion.newGrade;
+            if (promotion.newDepartment) updateData.department = promotion.newDepartment;
+            if (promotion.newSalary) updateData.salary = promotion.newSalary;
+            
+            // BR-HRMS-01: Update posting unit and location if promotion includes transfer
+            if (promotion.includesTransfer && promotion.newPostingUnitId) {
+                updateData.postingUnitId = promotion.newPostingUnitId;
+                
+                // Record transfer in employee history
+                const employee = await Employee.findById(promotion.employeeId._id);
+                if (employee) {
+                    if (!employee.transferHistory) {
+                        employee.transferHistory = [];
+                    }
+                    employee.transferHistory.push({
+                        fromUnitId: promotion.previousPostingUnitId,
+                        toUnitId: promotion.newPostingUnitId,
+                        effectiveDate: promotion.effectiveDate,
+                        transferType: 'Permanent',
+                        reason: `Promotion to ${promotion.newDesignation}`,
+                        changedBy: req.user._id || req.user.id,
+                        changedAt: new Date(),
+                    });
+                    
+                    // Update location if provided
+                    if (promotion.newLocation) {
+                        if (!employee.locationHistory) {
+                            employee.locationHistory = [];
+                        }
+                        employee.locationHistory.push({
+                            locationId: promotion.newLocation,
+                            effectiveDate: promotion.effectiveDate,
+                            reason: `Location change due to promotion and transfer`,
+                            changedBy: req.user._id || req.user.id,
+                            changedAt: new Date(),
+                        });
+                        updateData.location = promotion.newLocation;
+                    }
+                    
+                    await employee.save();
+                }
+            }
+            
+            await Employee.findByIdAndUpdate(promotion.employeeId._id, updateData);
             promotion.payrollUpdated = true;
             await promotion.save();
+            
+            // BR-HRMS-05: Create employee transfer record if includes transfer
+            if (promotion.includesTransfer && promotion.newPostingUnitId) {
+                const EmployeeTransfer = require('../models/EmployeeTransfer');
+                await EmployeeTransfer.create({
+                    tenantId: req.tenantId,
+                    employeeId: promotion.employeeId._id,
+                    fromUnitId: promotion.previousPostingUnitId,
+                    toUnitId: promotion.newPostingUnitId,
+                    transferType: 'Permanent',
+                    effectiveDate: promotion.effectiveDate,
+                    reason: `Automatic transfer due to promotion to ${promotion.newDesignation}`,
+                    status: 'Completed',
+                    initiatedBy: req.user._id || req.user.id,
+                    approvedBy: req.user._id || req.user.id,
+                    approvedAt: new Date(),
+                });
+            }
         }
 
         // Notify employee
