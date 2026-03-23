@@ -21,6 +21,12 @@ exports.createTenant = async (req, res) => {
         message: 'Admin email and password are required',
       });
     }
+    if (adminPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin password must be at least 6 characters',
+      });
+    }
     const codeUpper = code.toUpperCase().trim();
     const existingTenant = await Tenant.findOne({ code: codeUpper });
     if (existingTenant) {

@@ -1,4 +1,5 @@
 const PlatformSettings = require('../models/PlatformSettings');
+const User = require('../models/User');
 const { createAuditLog } = require('../utils/auditLog');
 
 const DEFAULTS = {
@@ -26,7 +27,29 @@ exports.getSettings = async (req, res) => {
 
 exports.updateSettings = async (req, res) => {
   try {
-    const updates = req.body;
+    const { password, ...updates } = req.body;
+
+    // When updating compliance settings, password verification is required
+    if (updates.compliance !== undefined) {
+      if (!password || typeof password !== 'string') {
+        return res.status(400).json({
+          success: false,
+          message: 'Password confirmation is required to change compliance settings',
+        });
+      }
+      const user = await User.findById(req.user._id).select('+password');
+      if (!user || !user.password) {
+        return res.status(500).json({ success: false, message: 'Unable to verify password' });
+      }
+      const isValid = await user.comparePassword(password);
+      if (!isValid) {
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect password. Compliance settings were not changed.',
+        });
+      }
+    }
+
     for (const [key, value] of Object.entries(updates)) {
       await PlatformSettings.findOneAndUpdate(
         { key },

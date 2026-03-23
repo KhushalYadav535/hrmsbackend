@@ -21,14 +21,21 @@ exports.getAnalytics = async (req, res) => {
       if (cm.tenantId?.name) moduleUsage[code].tenants.push(cm.tenantId.name);
     });
 
-    const tenantStats = tenants.map(t => ({
-      id: t._id,
-      name: t.name,
-      code: t.code,
-      employees: t.employees || 0,
-      status: t.status,
-      activeModules: companyModules.filter(cm => cm.tenantId?.toString() === t._id.toString() && cm.isEnabled).length,
-    }));
+    const tenantStats = tenants.map(t => {
+      const tenantIdStr = t._id.toString();
+      const activeCount = companyModules.filter(cm => {
+        const cmTenantId = cm.tenantId?._id ? cm.tenantId._id.toString() : (cm.tenantId || '').toString();
+        return cmTenantId === tenantIdStr && cm.isEnabled;
+      }).length;
+      return {
+        id: t._id,
+        name: t.name,
+        code: t.code,
+        employees: t.employees || 0,
+        status: t.status,
+        activeModules: activeCount,
+      };
+    });
 
     res.json({
       success: true,
@@ -67,13 +74,20 @@ exports.exportAnalytics = async (req, res) => {
       if (cm.tenantId?.name) moduleUsage[code].tenants.push(cm.tenantId.name);
     });
 
-    const tenantStats = tenants.map(t => ({
-      name: t.name,
-      code: t.code,
-      employees: t.employees || 0,
-      status: t.status,
-      activeModules: companyModules.filter(cm => cm.tenantId?.toString() === t._id.toString() && cm.isEnabled).length,
-    }));
+    const tenantStats = tenants.map(t => {
+      const tenantIdStr = t._id.toString();
+      const activeCount = companyModules.filter(cm => {
+        const cmTenantId = cm.tenantId?._id ? cm.tenantId._id.toString() : (cm.tenantId || '').toString();
+        return cmTenantId === tenantIdStr && cm.isEnabled;
+      }).length;
+      return {
+        name: t.name,
+        code: t.code,
+        employees: t.employees || 0,
+        status: t.status,
+        activeModules: activeCount,
+      };
+    });
 
     // BR-A8-01: Log export for compliance
     const AuditLog = require('../models/AuditLog');

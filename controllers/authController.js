@@ -147,29 +147,24 @@ exports.login = asyncHandler(async (req, res) => {
     }
 
     if (!user) {
-      // Log failed login attempt (skip audit log if tenantId not provided to avoid errors)
+      // Log failed login attempt (user doesn't exist)
       try {
-        if (tenantId) {
-          const tenant = await Tenant.findById(tenantId);
-          if (tenant) {
-            await AuditLog.create({
-              tenantId: tenant._id,
-              userId: null, // User doesn't exist
-              userName: email,
-              userEmail: email,
-              action: 'Login Failed',
-              module: 'Authentication',
-              entityType: 'User',
-              details: 'Invalid email or password',
-              ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
-              userAgent: req.get('user-agent') || 'Unknown',
-              status: 'Failed',
-            });
-          }
-        }
+        const auditTenantId = tenantId ? (await Tenant.findById(tenantId))?._id || null : null;
+        await AuditLog.create({
+          tenantId: auditTenantId,
+          userId: null,
+          userName: email,
+          userEmail: email,
+          action: 'Login Failed',
+          module: 'Authentication',
+          entityType: 'User',
+          details: 'Invalid email or password',
+          ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+          userAgent: req.get('user-agent') || 'Unknown',
+          status: 'Failed',
+        });
       } catch (auditError) {
         console.error('Audit log error:', auditError);
-        // Don't fail login if audit log fails
       }
       
       return res.status(401).json({
@@ -212,10 +207,9 @@ exports.login = asyncHandler(async (req, res) => {
         
         // Log account lockout
         try {
-          const tenantIdForAuditLock = user.tenantId && user.tenantId._id ? user.tenantId._id : (user.tenantId && user.tenantId.toString ? user.tenantId.toString() : user.tenantId);
-          if (tenantIdForAuditLock) {
-            await AuditLog.create({
-              tenantId: tenantIdForAuditLock,
+          const tenantIdForAuditLock = user.tenantId && user.tenantId._id ? user.tenantId._id : (user.tenantId && user.tenantId.toString ? user.tenantId.toString() : user.tenantId) || null;
+          await AuditLog.create({
+            tenantId: tenantIdForAuditLock,
               userId: user._id,
               userName: user.name || user.email,
               userEmail: user.email,
@@ -227,11 +221,10 @@ exports.login = asyncHandler(async (req, res) => {
               userAgent: req.get('user-agent') || 'Unknown',
               status: 'Failed',
             });
-          }
         } catch (auditError) {
           console.error('Audit log error:', auditError);
         }
-        
+
         return res.status(423).json({
           success: false,
           message: 'Account locked due to multiple failed login attempts. Please try again after 30 minutes.',
@@ -243,22 +236,20 @@ exports.login = asyncHandler(async (req, res) => {
       
       // Log failed login attempt
       try {
-        const tenantIdForAudit = user.tenantId && user.tenantId._id ? user.tenantId._id : (user.tenantId && user.tenantId.toString ? user.tenantId.toString() : user.tenantId);
-        if (tenantIdForAudit) {
-          await AuditLog.create({
-            tenantId: tenantIdForAudit,
-            userId: user._id,
-            userName: user.name || user.email,
-            userEmail: user.email,
-            action: 'Login Failed',
-            module: 'Authentication',
-            entityType: 'User',
-            details: `Failed login attempt ${user.failedLoginAttempts}/5`,
-            ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
-            userAgent: req.get('user-agent') || 'Unknown',
-            status: 'Failed',
-          });
-        }
+        const tenantIdForAudit = user.tenantId && user.tenantId._id ? user.tenantId._id : (user.tenantId && user.tenantId.toString ? user.tenantId.toString() : user.tenantId) || null;
+        await AuditLog.create({
+          tenantId: tenantIdForAudit,
+          userId: user._id,
+          userName: user.name || user.email,
+          userEmail: user.email,
+          action: 'Login Failed',
+          module: 'Authentication',
+          entityType: 'User',
+          details: `Failed login attempt ${user.failedLoginAttempts}/5`,
+          ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+          userAgent: req.get('user-agent') || 'Unknown',
+          status: 'Failed',
+        });
       } catch (auditError) {
         console.error('Audit log error:', auditError);
         // Don't fail login if audit log fails
@@ -317,24 +308,22 @@ exports.login = asyncHandler(async (req, res) => {
       });
     }
 
-    // Log successful login
+    // Log successful login (including Super Admin with null tenantId)
     try {
-      const tenantIdForAudit = user.tenantId && user.tenantId._id ? user.tenantId._id : (user.tenantId && user.tenantId.toString ? user.tenantId.toString() : user.tenantId);
-      if (tenantIdForAudit) {
-        await AuditLog.create({
-          tenantId: tenantIdForAudit,
-          userId: user._id,
-          userName: user.name || user.email,
-          userEmail: user.email,
-          action: 'Login Success',
-          module: 'Authentication',
-          entityType: 'User',
-          details: 'User logged in successfully',
-          ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
-          userAgent: req.get('user-agent') || 'Unknown',
-          status: 'Success',
-        });
-      }
+      const tenantIdForAudit = user.tenantId && user.tenantId._id ? user.tenantId._id : (user.tenantId && user.tenantId.toString ? user.tenantId.toString() : user.tenantId) || null;
+      await AuditLog.create({
+        tenantId: tenantIdForAudit,
+        userId: user._id,
+        userName: user.name || user.email,
+        userEmail: user.email,
+        action: 'Login Success',
+        module: 'Authentication',
+        entityType: 'User',
+        details: 'User logged in successfully',
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+        userAgent: req.get('user-agent') || 'Unknown',
+        status: 'Success',
+      });
     } catch (auditError) {
       console.error('Audit log error:', auditError);
       // Don't fail login if audit log fails
