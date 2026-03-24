@@ -5,6 +5,7 @@ const {
   getTenant,
   createTenant,
   updateTenant,
+  deleteTenant,
   getCurrentTenant,
   updateTenantSettings,
   approveTenant,
@@ -29,7 +30,8 @@ router.put('/current/settings', setTenant, authorize('Tenant Admin'), updateTena
 router
   .route('/:id')
   .get(authorize('Super Admin', 'Tenant Admin'), getTenant)
-  .put(authorize('Super Admin', 'Tenant Admin'), updateTenant);
+  .put(authorize('Super Admin', 'Tenant Admin'), updateTenant)
+  .delete(superAdminOnly, deleteTenant);
 
 // US-A2-02: Platform Admin approval workflow
 router.post('/:id/approve', superAdminOnly, approveTenant);

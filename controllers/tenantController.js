@@ -8,7 +8,9 @@ const asyncHandler = require('../middleware/errorHandler').asyncHandler;
 // @access  Private (Super Admin)
 exports.createTenant = async (req, res) => {
   try {
-    const { name, code, location, adminEmail, adminPassword, adminName } = req.body;
+    const { name, code, location, adminEmail, adminPassword, adminName,
+      bank_id, bank_code, bank_name, short_name, registration_no, rbi_license_no,
+      registered_office, address, city, state, country, pin, phone, email, website } = req.body;
     if (!name || !code) {
       return res.status(400).json({
         success: false,
@@ -48,17 +50,44 @@ exports.createTenant = async (req, res) => {
       name: name.trim(),
       code: codeUpper,
       location: location || '',
+      bank_id: bank_id?.trim() || undefined,
+      bank_code: bank_code?.trim() || undefined,
+      bank_name: bank_name?.trim() || undefined,
+      short_name: short_name?.trim() || undefined,
+      registration_no: registration_no?.trim() || undefined,
+      rbi_license_no: rbi_license_no?.trim() || undefined,
+      registered_office: registered_office?.trim() || undefined,
+      address: address?.trim() || undefined,
+      city: city?.trim() || undefined,
+      state: state?.trim() || undefined,
+      country: country?.trim() || undefined,
+      pin: pin?.trim() || undefined,
+      phone: phone?.trim() || undefined,
+      email: email?.trim() || undefined,
+      website: website?.trim() || undefined,
     });
 
-    // Create Tenant Admin user (same as register-tenant flow)
-    const adminUser = await User.create({
-      email: adminEmail.toLowerCase().trim(),
-      password: adminPassword,
-      name: adminName || 'Tenant Administrator',
-      tenantId: tenant._id,
-      role: 'Tenant Admin',
-      status: 'Active',
-    });
+    let adminUser;
+    try {
+      // Create Tenant Admin user - if this fails, rollback tenant
+      adminUser = await User.create({
+        email: adminEmail.toLowerCase().trim(),
+        password: adminPassword,
+        name: adminName || 'Tenant Administrator',
+        tenantId: tenant._id,
+        role: 'Tenant Admin',
+        status: 'Active',
+      });
+    } catch (userError) {
+      // Rollback: delete tenant if user creation fails (e.g. invalid password)
+      await Tenant.findByIdAndDelete(tenant._id);
+      const msg = userError?.message || 'Invalid admin user data';
+      return res.status(400).json({
+        success: false,
+        message: msg,
+        error: msg,
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -124,6 +153,21 @@ exports.getTenants = async (req, res) => {
           adminName: admin ? admin.name : '',
           registrationEmail: t.registrationEmail,
           emailVerified: t.emailVerified,
+          bank_id: t.bank_id,
+          bank_code: t.bank_code,
+          bank_name: t.bank_name,
+          short_name: t.short_name,
+          registration_no: t.registration_no,
+          rbi_license_no: t.rbi_license_no,
+          registered_office: t.registered_office,
+          address: t.address,
+          city: t.city,
+          state: t.state,
+          country: t.country,
+          pin: t.pin,
+          phone: t.phone,
+          email: t.email,
+          website: t.website,
           createdAt: t.createdAt,
           approvedBy: t.approvedBy,
           approvedAt: t.approvedAt,
@@ -677,11 +721,47 @@ exports.updateTenant = async (req, res) => {
       });
     }
 
-    const { name, location, status, settings, adminEmail, adminName } = req.body;
+    const { name, code, location, status, settings, adminEmail, adminName, adminPassword,
+      bank_id, bank_code, bank_name, short_name, registration_no, rbi_license_no,
+      registered_office, address, city, state, country, pin, phone, email, website } = req.body;
 
     if (name) tenant.name = name;
-    if (location) tenant.location = location;
+    if (location !== undefined) tenant.location = location;
     if (status) tenant.status = status;
+
+    // Bank/org fields (Super Admin only)
+    if (req.user.role === 'Super Admin') {
+      if (bank_id !== undefined) tenant.bank_id = bank_id || '';
+      if (bank_code !== undefined) tenant.bank_code = bank_code || '';
+      if (bank_name !== undefined) tenant.bank_name = bank_name || '';
+      if (short_name !== undefined) tenant.short_name = short_name || '';
+      if (registration_no !== undefined) tenant.registration_no = registration_no || '';
+      if (rbi_license_no !== undefined) tenant.rbi_license_no = rbi_license_no || '';
+      if (registered_office !== undefined) tenant.registered_office = registered_office || '';
+      if (address !== undefined) tenant.address = address || '';
+      if (city !== undefined) tenant.city = city || '';
+      if (state !== undefined) tenant.state = state || '';
+      if (country !== undefined) tenant.country = country || '';
+      if (pin !== undefined) tenant.pin = pin || '';
+      if (phone !== undefined) tenant.phone = phone || '';
+      if (email !== undefined) tenant.email = email || '';
+      if (website !== undefined) tenant.website = website || '';
+    }
+
+    // Super Admin can update tenant code (with uniqueness check)
+    if (req.user.role === 'Super Admin' && code) {
+      const codeUpper = code.toUpperCase().trim();
+      if (codeUpper !== tenant.code) {
+        const existing = await Tenant.findOne({ code: codeUpper });
+        if (existing) {
+          return res.status(400).json({
+            success: false,
+            message: 'A tenant with this code already exists',
+          });
+        }
+        tenant.code = codeUpper;
+      }
+    }
     if (settings) {
       // Update settings Map
       if (!tenant.settings) {
@@ -694,14 +774,13 @@ exports.updateTenant = async (req, res) => {
 
     await tenant.save();
 
-    // Update Tenant Admin user if adminEmail or adminName provided (Super Admin only)
-    if (req.user.role === 'Super Admin' && (adminEmail || adminName)) {
+    // Update Tenant Admin user if adminEmail, adminName or adminPassword provided (Super Admin only)
+    if (req.user.role === 'Super Admin' && (adminEmail || adminName || adminPassword)) {
       const adminUser = await User.findOne({ tenantId: tenant._id, role: 'Tenant Admin' });
       if (adminUser) {
         if (adminName) adminUser.name = adminName;
         if (adminEmail) {
           const emailLower = adminEmail.toLowerCase().trim();
-          // Check email uniqueness only if it changed
           if (emailLower !== adminUser.email) {
             const existing = await User.findOne({ email: emailLower });
             if (existing) {
@@ -712,6 +791,9 @@ exports.updateTenant = async (req, res) => {
             }
             adminUser.email = emailLower;
           }
+        }
+        if (adminPassword && adminPassword.length >= 6) {
+          adminUser.password = adminPassword;
         }
         await adminUser.save();
       }
@@ -772,6 +854,51 @@ exports.updateTenant = async (req, res) => {
       success: false,
       message: 'Server error',
       error: error.message,
+    });
+  }
+};
+
+// @desc    Delete tenant (Super Admin only)
+// @route   DELETE /api/tenants/:id
+// @access  Private (Super Admin)
+exports.deleteTenant = async (req, res) => {
+  try {
+    const tenant = await Tenant.findById(req.params.id);
+    if (!tenant) {
+      return res.status(404).json({ success: false, message: 'Tenant not found' });
+    }
+
+    // Delete all users for this tenant
+    await User.deleteMany({ tenantId: tenant._id });
+    await Tenant.findByIdAndDelete(req.params.id);
+
+    try {
+      await AuditLog.create({
+        tenantId: null,
+        userId: req.user._id,
+        userName: req.user.name || req.user.email,
+        userEmail: req.user.email,
+        action: 'Delete',
+        module: 'Tenant Management',
+        entityType: 'Tenant',
+        entityId: tenant._id,
+        details: `Tenant "${tenant.name}" (${tenant.code}) deleted`,
+        ipAddress: req.ip || req.headers['x-forwarded-for'] || 'Unknown',
+        userAgent: req.get('user-agent') || 'Unknown',
+        status: 'Success',
+      });
+    } catch (auditError) {
+      console.error('Audit log error:', auditError);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Tenant deleted successfully',
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };

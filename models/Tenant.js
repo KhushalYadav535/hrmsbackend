@@ -17,6 +17,22 @@ const tenantSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  // Bank/Organization details
+  bank_id: String,
+  bank_code: String,
+  bank_name: String,
+  short_name: String,
+  registration_no: String,
+  rbi_license_no: String,
+  registered_office: String,
+  address: String,
+  city: String,
+  state: String,
+  country: String,
+  pin: String,
+  phone: String,
+  email: String,
+  website: String,
   // Spec A2/A4: Expanded statuses for registration workflow + suspension
   status: {
     type: String,

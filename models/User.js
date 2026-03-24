@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema({
   password: {
     type: String,
     required: true,
-    minlength: 12, // BRD Requirement: Minimum 12 characters
+    // minlength removed - validation in pre-save hook (6 for Tenant Admin from platform, 12 for others)
   },
   passwordHistory: [{
     password: String,
@@ -202,11 +202,18 @@ userSchema.pre('save', async function (next) {
   }
 
   // BRD Requirement: Password policy validation
+  // Tenant Admin created via Platform Admin can use 6 chars min; others need 12 chars
   const password = this.password;
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
+  const isTenantAdminFromPlatform = this.isNew && this.role === 'Tenant Admin';
+  const minLen = isTenantAdminFromPlatform ? 6 : 12;
+  const passwordRegex = isTenantAdminFromPlatform
+    ? /^[A-Za-z\d@$!%*?&]{6,}$/
+    : /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
 
-  if (!passwordRegex.test(password)) {
-    const error = new Error('Password must be at least 12 characters with uppercase, lowercase, digit, and special character');
+  if (!passwordRegex.test(password) || password.length < minLen) {
+    const error = new Error(isTenantAdminFromPlatform
+      ? 'Password must be at least 6 characters'
+      : 'Password must be at least 12 characters with uppercase, lowercase, digit, and special character');
     if (typeof next === 'function') {
       return next(error);
     }
