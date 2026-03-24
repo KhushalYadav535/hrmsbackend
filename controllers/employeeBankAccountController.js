@@ -74,8 +74,8 @@ exports.createBankAccount = async (req, res) => {
   try {
     const { employeeId } = req.params;
     
-    // Security: Employee can only create their own bank accounts
-    if (req.user.role === 'Employee') {
+    // Security: Employee / Manager can only create their own bank accounts
+    if (req.user.role === 'Employee' || req.user.role === 'Manager') {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,
@@ -93,6 +93,26 @@ exports.createBankAccount = async (req, res) => {
 
     req.body.tenantId = req.tenantId;
     req.body.employeeId = employeeId;
+
+    if (req.body.accountNumber != null && req.body.accountNumber !== '') {
+      req.body.accountNumber = String(req.body.accountNumber);
+    }
+    if (req.body.ifscCode) {
+      req.body.ifscCode = String(req.body.ifscCode).toUpperCase().trim();
+    }
+
+    const Employee = require('../models/Employee');
+    const empRecord = await Employee.findOne({ _id: employeeId, tenantId: req.tenantId });
+    if (!empRecord) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+
+    req.body.branchName = (req.body.branchName && String(req.body.branchName).trim()) || '—';
+    req.body.accountType = req.body.accountType || 'Savings';
+    req.body.accountHolderName =
+      (req.body.accountHolderName && String(req.body.accountHolderName).trim()) ||
+      `${empRecord.firstName || ''} ${empRecord.lastName || ''}`.trim() ||
+      empRecord.email;
 
     const bankAccount = await EmployeeBankAccount.create(req.body);
 
@@ -150,8 +170,8 @@ exports.updateBankAccount = async (req, res) => {
   try {
     const { employeeId, id } = req.params;
     
-    // Security: Employee can only update their own bank accounts
-    if (req.user.role === 'Employee') {
+    // Security: Employee / Manager can only update their own bank accounts
+    if (req.user.role === 'Employee' || req.user.role === 'Manager') {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,
@@ -231,8 +251,8 @@ exports.deleteBankAccount = async (req, res) => {
   try {
     const { employeeId, id } = req.params;
     
-    // Security: Employee can only delete their own bank accounts
-    if (req.user.role === 'Employee') {
+    // Security: Employee / Manager can only delete their own bank accounts
+    if (req.user.role === 'Employee' || req.user.role === 'Manager') {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,

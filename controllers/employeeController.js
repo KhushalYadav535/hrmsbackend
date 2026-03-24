@@ -249,6 +249,10 @@ exports.createEmployee = async (req, res) => {
     const cleanedData = { ...req.body };
     const password = cleanedData.password;
     delete cleanedData.password; // Remove password from employee data
+
+    if (cleanedData.bankAccount != null && cleanedData.bankAccount !== '') {
+      cleanedData.bankAccount = String(cleanedData.bankAccount);
+    }
     
     Object.keys(cleanedData).forEach(key => {
       if (cleanedData[key] === '' || cleanedData[key] === undefined) {
@@ -262,7 +266,21 @@ exports.createEmployee = async (req, res) => {
     // Create User account for employee login
     const User = require('../models/User');
     const userName = `${firstName} ${lastName}`.trim();
-    
+    const designationStr = typeof designation === 'string' ? designation.trim() : String(designation || '');
+
+    const ensureUsername = async () => {
+      const nameParts = userName.split(/\s+/).filter(Boolean);
+      const first = (nameParts[0] || 'user').toLowerCase().replace(/[^a-z0-9]/g, '');
+      const rest = nameParts.slice(1).join('').toLowerCase().replace(/[^a-z0-9]/g, '');
+      let generatedUsername = `${first}.${rest || 'employee'}`;
+      let counter = 1;
+      while (await User.findOne({ tenantId: req.tenantId, username: generatedUsername })) {
+        generatedUsername = `${first}.${rest || 'employee'}${counter}`;
+        counter++;
+      }
+      return generatedUsername;
+    };
+
     try {
       // Check if user already exists
       const existingUser = await User.findOne({
@@ -271,35 +289,48 @@ exports.createEmployee = async (req, res) => {
       });
 
       if (existingUser) {
-        // If user exists, update it to link with employee
         existingUser.name = userName;
-        existingUser.password = password; // Will be hashed by pre-save hook
+        existingUser.password = password;
         existingUser.role = 'Employee';
-        existingUser.designation = designation.trim();
+        existingUser.designation = designationStr;
         existingUser.department = department.trim();
-        existingUser.status = 'active';
-        // Mark password as modified to trigger hashing
+        existingUser.status = 'Active';
+        existingUser.adminProvisioned = true;
+        existingUser.employeeId = employee._id;
+        if (!existingUser.username) {
+          existingUser.username = await ensureUsername();
+        }
         existingUser.markModified('password');
         await existingUser.save();
       } else {
-        // Create new user account
+        const generatedUsername = await ensureUsername();
         const newUser = new User({
           email: email.trim().toLowerCase(),
-          password: password, // Will be hashed by pre-save hook
+          password,
           name: userName,
+          username: generatedUsername,
           tenantId: req.tenantId,
           role: 'Employee',
-          designation: designation.trim(),
+          designation: designationStr,
           department: department.trim(),
-          status: 'active',
+          status: 'Active',
+          adminProvisioned: true,
+          employeeId: employee._id,
           joinDate: joinDate,
         });
         await newUser.save();
       }
     } catch (userError) {
       console.error('Error creating user account:', userError);
-      // If user creation fails, we still return success for employee creation
-      // but log the error
+      try {
+        await Employee.findByIdAndDelete(employee._id);
+      } catch (rollbackErr) {
+        console.error('Rollback employee after user failure:', rollbackErr);
+      }
+      return res.status(400).json({
+        success: false,
+        message: userError.message || 'Could not create login account. Check password (min 6 characters) and try again.',
+      });
     }
 
     // Update tenant employee count

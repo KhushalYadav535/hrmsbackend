@@ -98,7 +98,17 @@ exports.getUsers = asyncHandler(async (req, res) => {
     const filter = { tenantId: req.tenantId };
 
     if (status && status !== 'all') {
-      filter.status = status.toLowerCase();
+      const s = String(status).toLowerCase();
+      const statusMap = {
+        active: 'Active',
+        inactive: 'Inactive',
+        locked: 'Locked',
+        suspended: 'Suspended',
+        deactivated: 'Deactivated',
+        pending: 'Pending Activation',
+        'pending activation': 'Pending Activation',
+      };
+      filter.status = statusMap[s] || status;
     }
 
     if (role && role !== 'all') {

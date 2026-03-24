@@ -172,11 +172,12 @@ exports.createOrganizationUnit = asyncHandler(async (req, res) => {
     });
   }
 
-  // BR-ORG-01: Validate hierarchy
-  if (unitTypeUpper !== 'HO' && !parentUnitId) {
+  // BR-ORG-01: HO has no parent; BRANCH may omit parent (e.g. HO-only banks: Head Office → Branches)
+  const parentOptionalTypes = ['HO', 'BRANCH'];
+  if (!parentOptionalTypes.includes(unitTypeUpper) && !parentUnitId) {
     return res.status(400).json({
       success: false,
-      message: 'Parent unit is required for non-HO units',
+      message: 'Parent unit is required for this unit type',
     });
   }
 

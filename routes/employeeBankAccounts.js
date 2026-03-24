@@ -18,12 +18,12 @@ router.use(setTenant);
 router
   .route('/employees/:employeeId/bank-accounts')
   .get(getEmployeeBankAccounts)
-  .post(authorize('HR Administrator', 'Tenant Admin'), createBankAccount);
+  .post(authorize('HR Administrator', 'Tenant Admin', 'Employee', 'Manager'), createBankAccount);
 
 router
   .route('/employees/:employeeId/bank-accounts/:id')
   .get(getBankAccount)
-  .put(authorize('HR Administrator', 'Tenant Admin'), updateBankAccount)
-  .delete(authorize('HR Administrator', 'Tenant Admin'), deleteBankAccount);
+  .put(authorize('HR Administrator', 'Tenant Admin', 'Employee', 'Manager'), updateBankAccount)
+  .delete(authorize('HR Administrator', 'Tenant Admin', 'Employee', 'Manager'), deleteBankAccount);
 
 module.exports = router;

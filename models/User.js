@@ -113,6 +113,11 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
+  // Tenant Admin / HR provisioned employee login — allows 6+ char password without full complexity rule
+  adminProvisioned: {
+    type: Boolean,
+    default: false,
+  },
   // BRD Requirement: Account status
   status: {
     type: String,
@@ -202,16 +207,18 @@ userSchema.pre('save', async function (next) {
   }
 
   // BRD Requirement: Password policy validation
-  // Tenant Admin created via Platform Admin can use 6 chars min; others need 12 chars
+  // Tenant Admin created via Platform Admin can use 6 chars min; admin-provisioned Employee accounts same; others need 12 chars
   const password = this.password;
   const isTenantAdminFromPlatform = this.isNew && this.role === 'Tenant Admin';
-  const minLen = isTenantAdminFromPlatform ? 6 : 12;
-  const passwordRegex = isTenantAdminFromPlatform
+  const isAdminProvisionedEmployee = this.isNew && this.role === 'Employee' && this.adminProvisioned === true;
+  const useRelaxedPolicy = isTenantAdminFromPlatform || isAdminProvisionedEmployee;
+  const minLen = useRelaxedPolicy ? 6 : 12;
+  const passwordRegex = useRelaxedPolicy
     ? /^[A-Za-z\d@$!%*?&]{6,}$/
     : /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{12,}$/;
 
   if (!passwordRegex.test(password) || password.length < minLen) {
-    const error = new Error(isTenantAdminFromPlatform
+    const error = new Error(useRelaxedPolicy
       ? 'Password must be at least 6 characters'
       : 'Password must be at least 12 characters with uppercase, lowercase, digit, and special character');
     if (typeof next === 'function') {

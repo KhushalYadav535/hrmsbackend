@@ -273,6 +273,23 @@ exports.login = asyncHandler(async (req, res) => {
     // Generate session ID for concurrent session detection
     const sessionId = crypto.randomBytes(16).toString('hex');
     user.sessionId = sessionId;
+
+    const clientIp = req.ip || (req.headers['x-forwarded-for'] && String(req.headers['x-forwarded-for']).split(',')[0].trim()) || 'Unknown';
+    const clientUa = req.get('user-agent') || 'Unknown';
+    if (!Array.isArray(user.activeSessions)) {
+      user.activeSessions = [];
+    }
+    user.activeSessions.push({
+      sessionId,
+      ipAddress: clientIp,
+      userAgent: clientUa,
+      loginAt: new Date(),
+      lastActivity: new Date(),
+    });
+    // Cap stored sessions to avoid unbounded growth
+    if (user.activeSessions.length > 25) {
+      user.activeSessions = user.activeSessions.slice(-25);
+    }
     
     // Normalize status if it's invalid (fix for existing data with lowercase 'active')
     if (user.status && typeof user.status === 'string') {
