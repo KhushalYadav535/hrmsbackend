@@ -1,4 +1,5 @@
 const EmployeeFamilyDetail = require('../models/EmployeeFamilyDetail');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const AuditLog = require('../models/AuditLog');
 
 // @desc    Get family details for an employee
@@ -41,7 +42,7 @@ exports.upsertFamilyDetails = async (req, res) => {
   try {
     const { employeeId } = req.params;
     
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,

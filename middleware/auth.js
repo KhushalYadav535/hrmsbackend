@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const User = require('../models/User');
 
 // Protect routes - verify JWT token
@@ -91,13 +92,13 @@ exports.protect = async (req, res, next) => {
   }
 };
 
-// Grant access to specific roles
+// Grant access to specific roles (user may have multiple roles; any match allows)
 exports.authorize = (...roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    if (!userHasAnyRole(req.user, roles)) {
       return res.status(403).json({
         success: false,
-        message: `User role '${req.user.role}' is not authorized to access this route`,
+        message: 'You are not authorized to access this route',
       });
     }
     next();
@@ -106,7 +107,7 @@ exports.authorize = (...roles) => {
 
 // Super Admin only
 exports.superAdminOnly = (req, res, next) => {
-  if (req.user.role !== 'Super Admin') {
+  if (!userHasRole(req.user, 'Super Admin')) {
     return res.status(403).json({
       success: false,
       message: 'Super Admin access required',

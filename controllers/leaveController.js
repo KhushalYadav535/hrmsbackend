@@ -1,4 +1,5 @@
 const LeaveRequest = require('../models/LeaveRequest');
+const { userHasRole, userHasAnyRole, useNarrowEmployeeScope } = require('../utils/userRoles');
 const LeavePolicy = require('../models/LeavePolicy');
 const Employee = require('../models/Employee');
 const HolidayCalendar = require('../models/HolidayCalendar');
@@ -15,42 +16,33 @@ exports.getLeaves = async (req, res) => {
     const { employeeId, status, leaveType } = req.query;
     const filter = { tenantId: req.tenantId };
 
-    // Security: If user is Employee, restrict to their own records ONLY
-    if (req.user.role === 'Employee') {
-      // Find the employee record associated with this user
-      const employee = await Employee.findOne({ 
-        email: req.user.email,
-        tenantId: req.tenantId 
-      });
-
-      if (!employee) {
-        return res.status(404).json({
-          success: false,
-          message: 'Employee record not found for this user',
-        });
-      }
-
-      // Force filter to current employee's ID
-      filter.employeeId = employee._id;
-    } else if (employeeId) {
-      // For Admins/Managers, allow filtering by specific employee if provided
+    if (employeeId) {
       filter.employeeId = employeeId;
     }
 
     if (status) filter.status = status;
     if (leaveType) filter.leaveType = leaveType;
 
-    // HR Administrator and Tenant Admin can see ALL employee leaves in their tenant
-    // Manager can see team member leaves
-    if (req.user.role === 'Manager' && !employeeId) {
+    // Manager: team leaves (unless already scoped to employeeId)
+    if (userHasRole(req.user, 'Manager') && !employeeId) {
       const teamMembers = await Employee.find({
         tenantId: req.tenantId,
         reportingManager: req.user._id,
       }).select('_id');
       filter.employeeId = { $in: teamMembers.map((e) => e._id) };
+    } else if (useNarrowEmployeeScope(req.user)) {
+      const employee = await Employee.findOne({
+        email: req.user.email,
+        tenantId: req.tenantId,
+      });
+      if (!employee) {
+        return res.status(404).json({
+          success: false,
+          message: 'Employee record not found for this user',
+        });
+      }
+      filter.employeeId = employee._id;
     }
-    // HR Administrator and Tenant Admin: No employeeId filter means show all leaves in tenant
-    // This is already handled by the tenantId filter above
 
     console.log('getLeaves - Filter:', JSON.stringify(filter, null, 2));
     console.log('getLeaves - User role:', req.user.role);
@@ -789,7 +781,7 @@ exports.approveLeave = async (req, res) => {
       
       if (employeeUser && employeeUser.role === 'HR Administrator') {
         // Only Tenant Admin or Super Admin can approve HR Admin's leave
-        if (req.user.role !== 'Tenant Admin' && req.user.role !== 'Super Admin') {
+        if (!userHasAnyRole(req.user, ['Tenant Admin', 'Super Admin'])) {
           return res.status(403).json({
             success: false,
             message: 'HR Administrator leave requests must be approved by Tenant Admin.',
@@ -978,7 +970,7 @@ exports.getTeamCalendar = async (req, res) => {
     // If employeeId provided, get that employee's leaves
     if (employeeId) {
       filter.employeeId = employeeId;
-    } else if (req.user.role === 'Manager') {
+    } else if (userHasRole(req.user, 'Manager')) {
       // Manager sees team members' leaves
       const teamMembers = await Employee.find({
         tenantId: req.tenantId,

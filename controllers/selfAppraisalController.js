@@ -1,4 +1,5 @@
 const SelfAppraisal = require('../models/SelfAppraisal');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const AppraisalCycle = require('../models/AppraisalCycle');
 const Employee = require('../models/Employee');
 const Goal = require('../models/Goal');
@@ -19,7 +20,7 @@ exports.getSelfAppraisals = asyncHandler(async (req, res) => {
   if (status) filter.status = status;
 
   // Employee sees only their appraisals
-  if (req.user.role === 'Employee') {
+  if (userHasRole(req.user, 'Employee')) {
     const employee = await Employee.findOne({
       email: req.user.email,
       tenantId: req.tenantId,

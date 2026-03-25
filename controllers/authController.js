@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { userHasRole, userHasAnyRole, normalizeRoles } = require('../utils/userRoles');
 const Tenant = require('../models/Tenant');
 const AuditLog = require('../models/AuditLog');
 const generateToken = require('../utils/generateToken');
@@ -309,9 +310,9 @@ exports.login = asyncHandler(async (req, res) => {
     
     await user.save();
 
-    // BRD Requirement: MFA check for sensitive roles
+    // BRD Requirement: MFA check for sensitive roles (any assigned role counts)
     const sensitiveRoles = ['Payroll Administrator', 'HR Administrator', 'Tenant Admin', 'Finance Administrator', 'Super Admin'];
-    const requiresMFA = sensitiveRoles.includes(user.role) && user.mfaEnabled;
+    const requiresMFA = userHasAnyRole(user, sensitiveRoles) && user.mfaEnabled;
 
     if (requiresMFA) {
       // Return token with MFA required flag
@@ -398,6 +399,7 @@ exports.login = asyncHandler(async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        roles: normalizeRoles(user),
         payrollSubRole: user.payrollSubRole || null,
         tenantId: user.tenantId && user.tenantId._id ? user.tenantId._id.toString() : (user.tenantId ? user.tenantId.toString() : null),
         passwordExpiryDate: user.passwordExpiryDate,
@@ -516,6 +518,7 @@ exports.verifyMFA = asyncHandler(async (req, res) => {
       email: user.email,
       name: user.name,
       role: user.role,
+      roles: normalizeRoles(user),
       tenantId: user.tenantId.toString(),
     },
     message: 'MFA verification successful',
@@ -1005,7 +1008,7 @@ exports.changePassword = asyncHandler(async (req, res) => {
 exports.unlockAccount = asyncHandler(async (req, res) => {
   const { userId } = req.body;
 
-  if (!['Tenant Admin', 'Super Admin', 'HR Administrator'].includes(req.user.role)) {
+  if (!userHasAnyRole(req.user, ['Tenant Admin', 'Super Admin', 'HR Administrator'])) {
     return res.status(403).json({
       success: false,
       message: 'Only administrators can unlock accounts',

@@ -1,4 +1,5 @@
 const Overtime = require('../models/Overtime');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const Attendance = require('../models/Attendance');
 const AuditLog = require('../models/AuditLog');
@@ -290,7 +291,7 @@ exports.getOvertime = asyncHandler(async (req, res) => {
 
   if (employeeId) {
     query.employeeId = employeeId;
-  } else if (req.user.role === 'Employee') {
+  } else if (userHasRole(req.user, 'Employee')) {
     query.employeeId = req.user.employeeId;
   }
 

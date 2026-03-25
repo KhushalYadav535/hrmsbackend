@@ -1,4 +1,5 @@
 const Tenant = require('../models/Tenant');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
 const asyncHandler = require('../middleware/errorHandler').asyncHandler;
@@ -670,6 +671,13 @@ exports.getCurrentTenant = async (req, res) => {
       });
     }
 
+    const primaryAdmin = await User.findOne({
+      tenantId: tenant._id,
+      role: 'Tenant Admin',
+    })
+      .sort({ createdAt: 1 })
+      .select('email name');
+
     // Convert settings Map to object
     const settingsObj = {};
     if (tenant.settings && tenant.settings instanceof Map) {
@@ -687,6 +695,24 @@ exports.getCurrentTenant = async (req, res) => {
         location: tenant.location,
         employees: tenant.employees,
         status: tenant.status,
+        // Organization profile from Add Tenant (tenant document) — read-only for Tenant Admin
+        email: tenant.email || '',
+        phone: tenant.phone || '',
+        address: tenant.address || '',
+        registered_office: tenant.registered_office || '',
+        city: tenant.city || '',
+        state: tenant.state || '',
+        country: tenant.country || '',
+        pin: tenant.pin || '',
+        website: tenant.website || '',
+        bank_id: tenant.bank_id || '',
+        bank_code: tenant.bank_code || '',
+        bank_name: tenant.bank_name || '',
+        short_name: tenant.short_name || '',
+        registration_no: tenant.registration_no || '',
+        rbi_license_no: tenant.rbi_license_no || '',
+        primaryAdminEmail: primaryAdmin ? primaryAdmin.email : '',
+        primaryAdminName: primaryAdmin ? primaryAdmin.name : '',
         settings: settingsObj,
       },
     });
@@ -714,7 +740,7 @@ exports.updateTenant = async (req, res) => {
     }
 
     // Ensure tenant isolation - Tenant Admin can only update their own tenant
-    if (req.user.role === 'Tenant Admin' && tenant._id.toString() !== req.tenantId.toString()) {
+    if (userHasRole(req.user, 'Tenant Admin') && tenant._id.toString() !== req.tenantId.toString()) {
       return res.status(403).json({
         success: false,
         message: 'You can only update your own tenant',
@@ -730,7 +756,7 @@ exports.updateTenant = async (req, res) => {
     if (status) tenant.status = status;
 
     // Bank/org fields (Super Admin only)
-    if (req.user.role === 'Super Admin') {
+    if (userHasRole(req.user, 'Super Admin')) {
       if (bank_id !== undefined) tenant.bank_id = bank_id || '';
       if (bank_code !== undefined) tenant.bank_code = bank_code || '';
       if (bank_name !== undefined) tenant.bank_name = bank_name || '';
@@ -749,7 +775,7 @@ exports.updateTenant = async (req, res) => {
     }
 
     // Super Admin can update tenant code (with uniqueness check)
-    if (req.user.role === 'Super Admin' && code) {
+    if (userHasRole(req.user, 'Super Admin') && code) {
       const codeUpper = code.toUpperCase().trim();
       if (codeUpper !== tenant.code) {
         const existing = await Tenant.findOne({ code: codeUpper });
@@ -775,7 +801,7 @@ exports.updateTenant = async (req, res) => {
     await tenant.save();
 
     // Update Tenant Admin user if adminEmail, adminName or adminPassword provided (Super Admin only)
-    if (req.user.role === 'Super Admin' && (adminEmail || adminName || adminPassword)) {
+    if (userHasRole(req.user, 'Super Admin') && (adminEmail || adminName || adminPassword)) {
       const adminUser = await User.findOne({ tenantId: tenant._id, role: 'Tenant Admin' });
       if (adminUser) {
         if (adminName) adminUser.name = adminName;
@@ -926,11 +952,23 @@ exports.updateTenantSettings = async (req, res) => {
       });
     }
 
+    // Tenant profile / Add Tenant fields live on the Tenant document — not editable via this route
+    const reservedSettingsKeys = new Set([
+      'organizationName',
+      'email',
+      'phone',
+      'address',
+      'name',
+      'code',
+      'location',
+    ]);
+
     // Update settings Map
     if (!tenant.settings) {
       tenant.settings = new Map();
     }
-    Object.keys(settings).forEach(key => {
+    Object.keys(settings).forEach((key) => {
+      if (reservedSettingsKeys.has(key)) return;
       tenant.settings.set(key, settings[key]);
     });
 

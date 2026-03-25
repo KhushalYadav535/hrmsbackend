@@ -1,4 +1,5 @@
 const EmployeeBankAccount = require('../models/EmployeeBankAccount');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const AuditLog = require('../models/AuditLog');
 const { maskBankAccountData, maskArray } = require('../utils/masking');
 
@@ -75,7 +76,7 @@ exports.createBankAccount = async (req, res) => {
     const { employeeId } = req.params;
     
     // Security: Employee / Manager can only create their own bank accounts
-    if (req.user.role === 'Employee' || req.user.role === 'Manager') {
+    if (userHasAnyRole(req.user, ['Employee', 'Manager'])) {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,
@@ -171,7 +172,7 @@ exports.updateBankAccount = async (req, res) => {
     const { employeeId, id } = req.params;
     
     // Security: Employee / Manager can only update their own bank accounts
-    if (req.user.role === 'Employee' || req.user.role === 'Manager') {
+    if (userHasAnyRole(req.user, ['Employee', 'Manager'])) {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,
@@ -185,6 +186,13 @@ exports.updateBankAccount = async (req, res) => {
           message: 'Access denied. You can only manage your own bank accounts.',
         });
       }
+    }
+
+    if (req.body.accountNumber != null && req.body.accountNumber !== '') {
+      req.body.accountNumber = String(req.body.accountNumber);
+    }
+    if (req.body.ifscCode) {
+      req.body.ifscCode = String(req.body.ifscCode).toUpperCase().trim();
     }
 
     const bankAccount = await EmployeeBankAccount.findOneAndUpdate(
@@ -252,7 +260,7 @@ exports.deleteBankAccount = async (req, res) => {
     const { employeeId, id } = req.params;
     
     // Security: Employee / Manager can only delete their own bank accounts
-    if (req.user.role === 'Employee' || req.user.role === 'Manager') {
+    if (userHasAnyRole(req.user, ['Employee', 'Manager'])) {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,

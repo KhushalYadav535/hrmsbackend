@@ -1,4 +1,5 @@
 const Feedback = require('../models/Feedback');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -17,7 +18,7 @@ exports.getFeedbacks = asyncHandler(async (req, res) => {
   if (goalId) filter.goalId = goalId;
 
   // Employee sees feedbacks about them
-  if (req.user.role === 'Employee') {
+  if (userHasRole(req.user, 'Employee')) {
     const employee = await Employee.findOne({
       email: req.user.email,
       tenantId: req.tenantId,

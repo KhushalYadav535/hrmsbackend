@@ -1,5 +1,9 @@
 const RolePermission = require('../models/RolePermission');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const AuditLog = require('../models/AuditLog');
+
+/** Platform-scope roles: never manageable inside a tenant admin console */
+const PLATFORM_MANAGED_ROLES = ['Super Admin'];
 
 // Default permissions for each role
 const defaultRolePermissions = {
@@ -79,10 +83,14 @@ exports.getRolePermissions = async (req, res) => {
   try {
     let rolePermissions = await RolePermission.find({ tenantId: req.tenantId }).sort({ role: 1 });
 
-    // If no role permissions exist, initialize with defaults
+    const isSuperAdmin = req.user && userHasRole(req.user, 'Super Admin');
+    const tenantRoleKeys = Object.keys(defaultRolePermissions).filter(
+      (r) => isSuperAdmin || !PLATFORM_MANAGED_ROLES.includes(r)
+    );
+
+    // If no role permissions exist, initialize with defaults (tenant-scoped roles only unless platform admin)
     if (rolePermissions.length === 0) {
-      const roles = Object.keys(defaultRolePermissions);
-      const permissionsToCreate = roles.map(role => ({
+      const permissionsToCreate = tenantRoleKeys.map((role) => ({
         tenantId: req.tenantId,
         role,
         permissions: defaultRolePermissions[role],
@@ -92,14 +100,21 @@ exports.getRolePermissions = async (req, res) => {
       rolePermissions = await RolePermission.insertMany(permissionsToCreate);
     }
 
-    // Ensure Super Admin has all permissions regardless of DB state
-    const processedData = rolePermissions.map(rp => {
+    // Ensure Super Admin has all permissions regardless of DB state (only when exposed to platform admin)
+    let processedData = rolePermissions.map((rp) => {
       if (rp.role === 'Super Admin') {
         const obj = rp.toObject ? rp.toObject() : rp;
         return { ...obj, permissions: allPermissions };
       }
       return rp;
     });
+
+    if (!isSuperAdmin) {
+      processedData = processedData.filter((rp) => {
+        const plain = rp.toObject ? rp.toObject() : rp;
+        return !PLATFORM_MANAGED_ROLES.includes(plain.role);
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -120,6 +135,14 @@ exports.getRolePermissions = async (req, res) => {
 // @access  Private
 exports.getRolePermission = async (req, res) => {
   try {
+    const isSuperAdmin = req.user && userHasRole(req.user, 'Super Admin');
+    if (!isSuperAdmin && PLATFORM_MANAGED_ROLES.includes(req.params.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'This role is managed at platform level and is not available in tenant settings',
+      });
+    }
+
     let rolePermission = await RolePermission.findOne({
       tenantId: req.tenantId,
       role: req.params.role,
@@ -166,6 +189,14 @@ exports.getRolePermission = async (req, res) => {
 // @access  Private (Tenant Admin only)
 exports.updateRolePermissions = async (req, res) => {
   try {
+    const isSuperAdmin = req.user && userHasRole(req.user, 'Super Admin');
+    if (!isSuperAdmin && PLATFORM_MANAGED_ROLES.includes(req.params.role)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Permissions for platform roles cannot be changed from the tenant admin console',
+      });
+    }
+
     const { permissions, status } = req.body;
 
     if (!permissions || !Array.isArray(permissions)) {

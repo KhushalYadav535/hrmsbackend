@@ -1,4 +1,5 @@
 const Feedback360 = require('../models/Feedback360');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -16,7 +17,7 @@ exports.getFeedback360s = asyncHandler(async (req, res) => {
   if (status) filter.status = status;
 
   // Employee sees only their 360 feedbacks
-  if (req.user.role === 'Employee') {
+  if (userHasRole(req.user, 'Employee')) {
     const employee = await Employee.findOne({
       email: req.user.email,
       tenantId: req.tenantId,

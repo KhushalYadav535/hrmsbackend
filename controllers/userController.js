@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { userHasRole, primaryRole, ROLE_ENUM } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const { generateEmployeeId } = require('../services/employeeIdService');
 const { createAuditLog } = require('../utils/auditLog');
@@ -11,7 +12,7 @@ const asyncHandler = require('../middleware/errorHandler').asyncHandler;
 // @access  Private (Tenant Admin, HR Administrator)
 // BRD: BR-UAM-001
 exports.createUser = asyncHandler(async (req, res) => {
-  const { email, name, employeeId, role, designation, department, username, payrollSubRole } = req.body;
+  const { email, name, employeeId, role, roles, designation, department, username, payrollSubRole } = req.body;
 
   // Check if user already exists
   const existingUser = await User.findOne({
@@ -43,6 +44,10 @@ exports.createUser = asyncHandler(async (req, res) => {
   // Generate temporary password
   const tempPassword = generateTemporaryPassword();
 
+  const initialRoles = Array.isArray(roles) && roles.length
+    ? [...new Set(roles.filter((r) => ROLE_ENUM.includes(r)))]
+    : [role || 'Employee'];
+
   const user = await User.create({
     tenantId: req.tenantId,
     email,
@@ -50,8 +55,11 @@ exports.createUser = asyncHandler(async (req, res) => {
     username: generatedUsername,
     employeeId,
     password: tempPassword,
-    role: role || 'Employee',
-    payrollSubRole: role === 'Payroll Administrator' && (payrollSubRole === 'Maker' || payrollSubRole === 'Checker') ? payrollSubRole : null,
+    role: primaryRole({ roles: initialRoles, role: initialRoles[0] || 'Employee' }),
+    roles: initialRoles,
+    payrollSubRole: initialRoles.includes('Payroll Administrator') && (payrollSubRole === 'Maker' || payrollSubRole === 'Checker')
+      ? payrollSubRole
+      : null,
     designation,
     department,
     status: 'Pending Activation',
@@ -111,16 +119,22 @@ exports.getUsers = asyncHandler(async (req, res) => {
       filter.status = statusMap[s] || status;
     }
 
-    if (role && role !== 'all') {
-      filter.role = role;
-    }
-
     if (search) {
       filter.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { designation: { $regex: search, $options: 'i' } },
       ];
+    }
+
+    if (role && role !== 'all') {
+      const roleClause = { $or: [{ role }, { roles: role }] };
+      if (filter.$or) {
+        filter.$and = [{ $or: filter.$or }, roleClause];
+        delete filter.$or;
+      } else {
+        Object.assign(filter, roleClause);
+      }
     }
 
     const users = await User.find(filter)
@@ -176,7 +190,7 @@ exports.getUser = asyncHandler(async (req, res) => {
 // @access  Private (Tenant Admin, HR Administrator)
 exports.updateUser = asyncHandler(async (req, res) => {
   try {
-    const { name, role, designation, department, status, payrollSubRole } = req.body;
+    const { name, role, roles, designation, department, status, payrollSubRole } = req.body;
 
     const user = await User.findOne({
       _id: req.params.id,
@@ -190,21 +204,42 @@ exports.updateUser = asyncHandler(async (req, res) => {
       });
     }
 
+    const rolePayload = Array.isArray(roles) && roles.length > 0;
+    const singleRolePayload = role != null && role !== '';
+
     // Only Tenant Admin can change roles
-    if (role && req.user.role !== 'Tenant Admin') {
+    if ((rolePayload || singleRolePayload) && !userHasRole(req.user, 'Tenant Admin')) {
       return res.status(403).json({
         success: false,
         message: 'Only Tenant Admin can change user roles',
       });
     }
 
+    const proposedNorm = rolePayload
+      ? [...new Set(roles.filter((r) => ROLE_ENUM.includes(r)))]
+      : singleRolePayload
+        ? [role]
+        : null;
+
+    if (
+      proposedNorm &&
+      proposedNorm.includes('Super Admin') &&
+      !userHasRole(req.user, 'Super Admin')
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Super Admin can only be assigned by platform administration, not from tenant user management',
+      });
+    }
+
     if (name) user.name = name;
-    if (role) user.role = role;
+    if (proposedNorm && proposedNorm.length) {
+      user.roles = proposedNorm;
+    }
     if (designation) user.designation = designation;
     if (department) user.department = department;
     if (status) user.status = status;
-    // BRD: Payroll Maker-Checker - clear payrollSubRole if role changes away from Payroll Administrator
-    if (role && role !== 'Payroll Administrator') {
+    if (proposedNorm && !proposedNorm.includes('Payroll Administrator')) {
       user.payrollSubRole = null;
     } else if (payrollSubRole !== undefined) {
       user.payrollSubRole = payrollSubRole === '' || payrollSubRole === null ? null : payrollSubRole;

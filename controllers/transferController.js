@@ -1,4 +1,5 @@
 const TransferRequest = require('../models/TransferRequest');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const OrganizationUnit = require('../models/OrganizationUnit');
 const PostingHistory = require('../models/PostingHistory');
@@ -137,7 +138,7 @@ exports.getTransferRequests = asyncHandler(async (req, res) => {
 
   if (employeeId) {
     query.employeeId = employeeId;
-  } else if (req.user.role === 'Employee') {
+  } else if (userHasRole(req.user, 'Employee')) {
     const employee = await Employee.findOne({
       tenantId: req.tenantId,
       _id: req.user.employeeId,

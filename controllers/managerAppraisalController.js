@@ -1,4 +1,5 @@
 const ManagerAppraisal = require('../models/ManagerAppraisal');
+const { userHasRole, userHasAnyRole, useNarrowEmployeeScope } = require('../utils/userRoles');
 const SelfAppraisal = require('../models/SelfAppraisal');
 const AppraisalCycle = require('../models/AppraisalCycle');
 const Employee = require('../models/Employee');
@@ -20,13 +21,9 @@ exports.getManagerAppraisals = asyncHandler(async (req, res) => {
   if (appraisalCycleId) filter.appraisalCycleId = appraisalCycleId;
   if (status) filter.status = status;
 
-  // Manager sees their team appraisals
-  if (req.user.role === 'Manager' && !managerId) {
+  if (userHasRole(req.user, 'Manager') && !managerId) {
     filter.managerId = req.user._id;
-  }
-
-  // Employee sees only their appraisals
-  if (req.user.role === 'Employee') {
+  } else if (useNarrowEmployeeScope(req.user)) {
     const employee = await Employee.findOne({
       email: req.user.email,
       tenantId: req.tenantId,
@@ -68,7 +65,7 @@ exports.createManagerAppraisal = asyncHandler(async (req, res) => {
   }
 
   // Verify manager is the reporting manager
-  if (employee.reportingManager?.toString() !== req.user._id.toString() && req.user.role !== 'HR Administrator' && req.user.role !== 'Tenant Admin') {
+  if (employee.reportingManager?.toString() !== req.user._id.toString() && !userHasRole(req.user, 'HR Administrator') && !userHasRole(req.user, 'Tenant Admin')) {
     return res.status(403).json({
       success: false,
       message: 'You are not authorized to appraise this employee',

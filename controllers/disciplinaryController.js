@@ -1,4 +1,5 @@
 const DisciplinaryRecord = require('../models/DisciplinaryRecord');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 const { sendNotification } = require('../utils/notificationService');
@@ -13,7 +14,7 @@ exports.getDisciplinaryRecords = async (req, res) => {
         if (status) filter.status = status;
 
         // Employee sees only their own records
-        if (req.user.role === 'Employee') {
+        if (userHasRole(req.user, 'Employee')) {
             const emp = await Employee.findOne({ email: req.user.email, tenantId: req.tenantId });
             if (!emp) return res.status(404).json({ success: false, message: 'Employee not found' });
             filter.employeeId = emp._id;

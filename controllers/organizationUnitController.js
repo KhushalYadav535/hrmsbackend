@@ -281,6 +281,9 @@ exports.updateOrganizationUnit = asyncHandler(async (req, res) => {
       unit[key] = new Date(req.body[key]);
     } else if (key === 'effectiveDate' && req.body[key]) {
       unit[key] = new Date(req.body[key]);
+    } else if (key === 'parentUnitId') {
+      // Allow clearing parent for BRANCH (optional zone / HO-only structure)
+      unit.parentUnitId = req.body.parentUnitId || null;
     } else if (req.body[key] !== undefined) {
       unit[key] = req.body[key];
     }

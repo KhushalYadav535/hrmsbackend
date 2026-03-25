@@ -1,4 +1,5 @@
 const EmployeeEmergencyContact = require('../models/EmployeeEmergencyContact');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const AuditLog = require('../models/AuditLog');
 
 // @desc    Get all emergency contacts for an employee
@@ -35,7 +36,7 @@ exports.createEmergencyContact = async (req, res) => {
     const { employeeId } = req.params;
     
     // Security: Employee can only create their own emergency contacts
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,
@@ -106,7 +107,7 @@ exports.updateEmergencyContact = async (req, res) => {
   try {
     const { employeeId, id } = req.params;
     
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,
@@ -183,7 +184,7 @@ exports.deleteEmergencyContact = async (req, res) => {
   try {
     const { employeeId, id } = req.params;
     
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const Employee = require('../models/Employee');
       const employee = await Employee.findOne({
         _id: employeeId,

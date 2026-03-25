@@ -1,4 +1,5 @@
 const Payroll = require('../models/Payroll');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 const Tenant = require('../models/Tenant');
@@ -27,9 +28,7 @@ exports.generateBankFile = async (req, res) => {
     }
 
     // BRD Requirement: Only Payroll Admin or Finance Admin can generate bank files
-    if (req.user.role !== 'Payroll Administrator' &&
-      req.user.role !== 'Finance Administrator' &&
-      req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['Payroll Administrator', 'Finance Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll and Finance Administrators can generate bank files.',
@@ -248,7 +247,7 @@ exports.generateECRFile = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'Payroll Administrator' && req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['Payroll Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators can generate ECR files.',
@@ -318,7 +317,7 @@ exports.uploadECRFile = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'Payroll Administrator' && req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['Payroll Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators can upload ECR files.',
@@ -380,7 +379,7 @@ exports.downloadEPFOAcknowledgment = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'Payroll Administrator' && req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['Payroll Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators can download acknowledgments.',
@@ -426,7 +425,7 @@ exports.validateUAN = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'Payroll Administrator' && req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['Payroll Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators can validate UANs.',
@@ -471,7 +470,7 @@ exports.bulkValidateUANs = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'Payroll Administrator' && req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['Payroll Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators can validate UANs.',
@@ -522,7 +521,7 @@ exports.generateESICFile = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'Payroll Administrator' && req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['Payroll Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators can generate ESIC files.',
@@ -591,7 +590,7 @@ exports.uploadESICFile = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'Payroll Administrator' && req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['Payroll Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators can upload ESIC files.',
@@ -653,7 +652,7 @@ exports.getESICPaymentStatus = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'Payroll Administrator' && req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['Payroll Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators can check payment status.',

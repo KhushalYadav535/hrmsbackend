@@ -1,4 +1,5 @@
 const AccessCertification = require('../models/AccessCertification');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const User = require('../models/User');
 const Employee = require('../models/Employee');
 const RolePermission = require('../models/RolePermission');
@@ -202,7 +203,7 @@ exports.getCertificationCampaigns = asyncHandler(async (req, res) => {
   if (status) filter.status = status;
   if (certifierId) {
     filter.certifierId = certifierId;
-  } else if (req.user.role !== 'Tenant Admin' && req.user.role !== 'Super Admin') {
+  } else if (!userHasAnyRole(req.user, ['Tenant Admin', 'Super Admin'])) {
     // Non-admins can only see their own campaigns
     filter.certifierId = req.user._id;
   }

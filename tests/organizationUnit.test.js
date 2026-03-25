@@ -262,28 +262,52 @@ describe('OrganizationUnit Hierarchy Traversal', () => {
   });
 
   describe('Hierarchy validation', () => {
-    test('should prevent invalid hierarchy (BRANCH under HO)', async () => {
-      await expect(
-        OrganizationUnit.create({
-          tenantId,
-          unitCode: 'BR-INVALID',
-          unitName: 'Invalid Branch',
-          unitType: 'BRANCH',
-          parentUnitId: hoId, // Invalid: BRANCH cannot be under HO
-        })
-      ).rejects.toThrow();
+    test('should allow BRANCH under HO (small banks without zones)', async () => {
+      const ts = Date.now();
+      const branchUnderHo = await OrganizationUnit.create({
+        tenantId,
+        unitCode: `BR-${String(ts).slice(-6).padStart(6, '0')}`,
+        unitName: 'Branch Under HO',
+        unitType: 'BRANCH',
+        parentUnitId: hoId,
+        state: 'Maharashtra',
+        city: 'Pune',
+        isActive: true,
+      });
+      expect(branchUnderHo.parentUnitId.toString()).toBe(hoId.toString());
+      await OrganizationUnit.deleteOne({ _id: branchUnderHo._id });
     });
 
-    test('should prevent invalid hierarchy (RO under HO)', async () => {
-      await expect(
-        OrganizationUnit.create({
-          tenantId,
-          unitCode: 'RO-INVALID',
-          unitName: 'Invalid RO',
-          unitType: 'RO',
-          parentUnitId: hoId, // Invalid: RO cannot be under HO
-        })
-      ).rejects.toThrow();
+    test('should allow BRANCH with no parent', async () => {
+      const ts = Date.now() + 7;
+      const orphanBranch = await OrganizationUnit.create({
+        tenantId,
+        unitCode: `BR-${String(ts).slice(-6).padStart(6, '0')}`,
+        unitName: 'Standalone Branch',
+        unitType: 'BRANCH',
+        parentUnitId: null,
+        state: 'Karnataka',
+        city: 'Bengaluru',
+        isActive: true,
+      });
+      expect(orphanBranch.parentUnitId).toBeNull();
+      await OrganizationUnit.deleteOne({ _id: orphanBranch._id });
+    });
+
+    test('should allow Region (RO) directly under Head Office', async () => {
+      const ts = Date.now() + 3;
+      const roUnderHo = await OrganizationUnit.create({
+        tenantId,
+        unitCode: `RO-HO${String(ts).slice(-4)}`,
+        unitName: 'Region Under HO',
+        unitType: 'RO',
+        parentUnitId: hoId,
+        state: 'Maharashtra',
+        city: 'Mumbai',
+        isActive: true,
+      });
+      expect(roUnderHo.parentUnitId.toString()).toBe(hoId.toString());
+      await OrganizationUnit.deleteOne({ _id: roUnderHo._id });
     });
 
     test('should allow valid hierarchy (ZO under HO)', async () => {

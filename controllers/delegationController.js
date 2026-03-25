@@ -1,4 +1,5 @@
 const Delegation = require('../models/Delegation');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const User = require('../models/User');
 const asyncHandler = require('../middleware/errorHandler').asyncHandler;
 const { createAuditLog } = require('../utils/auditLog');
@@ -219,7 +220,7 @@ exports.revokeDelegation = asyncHandler(async (req, res) => {
 
   // Only delegator or admin can revoke
   if (delegation.delegatorId.toString() !== req.user._id.toString() && 
-      !['Tenant Admin', 'Super Admin'].includes(req.user.role)) {
+      !userHasAnyRole(req.user, ['Tenant Admin', 'Super Admin'])) {
     return res.status(403).json({
       success: false,
       message: 'Only delegator or admin can revoke delegation',

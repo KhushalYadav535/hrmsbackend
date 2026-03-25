@@ -1,4 +1,5 @@
 const LeaveBalance = require('../models/LeaveBalance');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const LeavePolicy = require('../models/LeavePolicy');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
@@ -11,9 +12,7 @@ const mongoose = require('mongoose');
 exports.accrueLeaves = async (req, res) => {
   try {
     // BRD Requirement: Only HR Admin or System Admin can trigger accrual
-    if (req.user.role !== 'HR Administrator' && 
-        req.user.role !== 'Tenant Admin' && 
-        req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['HR Administrator', 'Tenant Admin', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only HR Administrators can accrue leaves.',

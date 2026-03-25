@@ -1,4 +1,5 @@
 const ProfileUpdateRequest = require('../models/ProfileUpdateRequest');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 const asyncHandler = require('../middleware/errorHandler').asyncHandler;
@@ -92,7 +93,7 @@ exports.getRequests = asyncHandler(async (req, res) => {
 
   const query = { tenantId: req.tenantId };
 
-  const isHR = ['HR Administrator', 'Tenant Admin', 'Super Admin'].includes(req.user.role);
+  const isHR = userHasAnyRole(req.user, ['HR Administrator', 'Tenant Admin', 'Super Admin']);
   if (!isHR && req.user.employeeId) {
     const emp = await Employee.findOne({
       tenantId: req.tenantId,
@@ -151,7 +152,7 @@ exports.getRequest = asyncHandler(async (req, res) => {
     });
   }
 
-  const isHR = ['HR Administrator', 'Tenant Admin', 'Super Admin'].includes(req.user.role);
+  const isHR = userHasAnyRole(req.user, ['HR Administrator', 'Tenant Admin', 'Super Admin']);
   if (!isHR && req.user.employeeId?.toString() !== request.employeeId?._id?.toString()) {
     const emp = await Employee.findOne({ tenantId: req.tenantId, email: req.user.email });
     if (!emp || emp._id.toString() !== request.employeeId?._id?.toString()) {

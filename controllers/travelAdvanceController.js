@@ -1,4 +1,5 @@
 const TravelAdvance = require('../models/TravelAdvance');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const TravelRequest = require('../models/TravelRequest');
 const TravelPolicy = require('../models/TravelPolicy');
 const Employee = require('../models/Employee');
@@ -19,7 +20,7 @@ exports.getTravelAdvances = async (req, res) => {
     if (travelRequestId) filter.travelRequestId = travelRequestId;
 
     // Employee sees only their advances
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const employee = await Employee.findOne({ 
         email: req.user.email,
         tenantId: req.tenantId 
@@ -173,7 +174,7 @@ exports.approveTravelAdvance = async (req, res) => {
     }
 
     // Check if finance approval required
-    if (advance.requiresFinanceApproval && req.user.role !== 'Finance Administrator' && req.user.role !== 'Tenant Admin') {
+    if (advance.requiresFinanceApproval && !userHasRole(req.user, 'Finance Administrator') && !userHasRole(req.user, 'Tenant Admin')) {
       // First level approval
       advance.approverId = req.user._id;
       advance.approverName = req.user.name || req.user.email;

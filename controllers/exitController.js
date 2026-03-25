@@ -1,4 +1,5 @@
 const EmployeeSeparation = require('../models/EmployeeSeparation');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const SeparationClearance = require('../models/SeparationClearance');
 const FnfSettlement = require('../models/FnfSettlement');
 const Employee = require('../models/Employee');
@@ -104,7 +105,7 @@ exports.getSeparation = asyncHandler(async (req, res) => {
   }
 
   // Check access: Employee can only see their own, HR/Admin can see all
-  if (req.user.role !== 'HR Administrator' && req.user.role !== 'Tenant Admin' && req.user.role !== 'Super Admin') {
+  if (!userHasRole(req.user, 'HR Administrator') && !userHasAnyRole(req.user, ['Tenant Admin', 'Super Admin'])) {
     if (separation.employeeId._id.toString() !== req.user.employeeId?.toString()) {
       return res.status(403).json({
         success: false,
@@ -251,7 +252,7 @@ exports.getClearances = asyncHandler(async (req, res) => {
   }
 
   // Check access
-  if (req.user.role !== 'HR Administrator' && req.user.role !== 'Tenant Admin' && req.user.role !== 'Super Admin') {
+  if (!userHasRole(req.user, 'HR Administrator') && !userHasAnyRole(req.user, ['Tenant Admin', 'Super Admin'])) {
     if (separation.employeeId.toString() !== req.user.employeeId?.toString()) {
       return res.status(403).json({
         success: false,

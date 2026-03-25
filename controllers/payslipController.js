@@ -1,4 +1,5 @@
 const Payroll = require('../models/Payroll');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const fs = require('fs');
 const path = require('path');
@@ -22,7 +23,7 @@ exports.generatePayslipPDF = async (req, res) => {
     }
 
     // Security: Employee can only view their own payslip
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const employee = await Employee.findOne({
         email: req.user.email,
         tenantId: req.tenantId,

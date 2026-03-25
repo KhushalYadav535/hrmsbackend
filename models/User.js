@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { ROLE_ENUM, ROLE_RANK } = require('../utils/userRoles');
 
 const userSchema = new mongoose.Schema({
   tenantId: {
@@ -85,17 +86,14 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: [
-      'Super Admin',
-      'Tenant Admin',
-      'HR Administrator',
-      'Payroll Administrator',
-      'Finance Administrator',
-      'Manager',
-      'Employee',
-      'Auditor',
-    ],
+    enum: ROLE_ENUM,
     required: true,
+  },
+  /** Additional roles beyond `role` (union of all hats). Kept in sync in pre-save. */
+  roles: {
+    type: [String],
+    enum: ROLE_ENUM,
+    default: undefined,
   },
   // BRD: Payroll Maker-Checker - Tenant Admin assigns Maker or Checker for Payroll Administrator
   // Maker: create/edit payroll; Checker: approve/reject only. null = legacy (both until explicitly set)
@@ -271,6 +269,22 @@ userSchema.pre('save', async function (next) {
   if (typeof next === 'function') {
     next();
   }
+});
+
+// Multi-role: normalize `roles[]` and set legacy `role` to highest-ranked entry
+userSchema.pre('save', function (next) {
+  if (this.roles && Array.isArray(this.roles) && this.roles.length > 0) {
+    this.roles = [...new Set(this.roles.filter((r) => ROLE_ENUM.includes(r)))];
+    if (this.roles.length) {
+      this.role = this.roles.reduce(
+        (best, r) => (ROLE_RANK[r] > ROLE_RANK[best] ? r : best),
+        this.roles[0]
+      );
+    }
+  } else if (this.role && ROLE_ENUM.includes(this.role)) {
+    this.roles = [this.role];
+  }
+  if (typeof next === 'function') next();
 });
 
 // Normalize status before save (handle legacy lowercase values)

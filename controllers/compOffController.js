@@ -1,4 +1,5 @@
 const CompOff = require('../models/CompOff');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const HolidayCalendar = require('../models/HolidayCalendar');
 const WeeklyOff = require('../models/WeeklyOff');
@@ -166,7 +167,7 @@ exports.getCompOff = asyncHandler(async (req, res) => {
 
   if (employeeId) {
     query.employeeId = employeeId;
-  } else if (req.user.role === 'Employee') {
+  } else if (userHasRole(req.user, 'Employee')) {
     query.employeeId = req.user.employeeId;
   }
 

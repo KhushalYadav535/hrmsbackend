@@ -1,4 +1,5 @@
 const moduleManagementService = require('../services/moduleManagementService');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 
 /**
  * Middleware to check if a module is enabled for the user's company (tenant)
@@ -9,7 +10,7 @@ const requireModule = (moduleCode, permission = null) => {
   return async (req, res, next) => {
     try {
       // Super Admin bypasses all module checks
-      if (req.user.role === 'Super Admin') return next();
+      if (userHasRole(req.user, 'Super Admin')) return next();
 
       const tenantId = req.user.tenantId?._id || req.user.tenantId;
       const userId = req.user.id;

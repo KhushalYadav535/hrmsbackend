@@ -1,4 +1,5 @@
 const EmployeeLoan = require('../models/EmployeeLoan');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const LoanType = require('../models/LoanType');
 const LoanEmiSchedule = require('../models/LoanEmiSchedule');
 const LoanApproval = require('../models/LoanApproval');
@@ -413,7 +414,7 @@ exports.getLoanSchedule = asyncHandler(async (req, res) => {
   }
 
   // Check access: Employee can only see their own loans
-  if (req.user.role === 'Employee') {
+  if (userHasRole(req.user, 'Employee')) {
     const employee = await Employee.findOne({
       email: req.user.email,
       tenantId: req.tenantId,
@@ -532,7 +533,7 @@ exports.getLoanDetails = asyncHandler(async (req, res) => {
   }
 
   // Check access: Employee can only see their own loans
-  if (req.user.role === 'Employee') {
+  if (userHasRole(req.user, 'Employee')) {
     const employee = await Employee.findOne({
       email: req.user.email,
       tenantId: req.tenantId,

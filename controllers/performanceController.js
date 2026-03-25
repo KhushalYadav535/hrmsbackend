@@ -1,4 +1,5 @@
 const Performance = require('../models/Performance');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 
 // @desc    Get all performance records
@@ -10,7 +11,7 @@ exports.getPerformances = async (req, res) => {
     const filter = { tenantId: req.tenantId };
 
     // Security Check: If user is Employee, restrict to their own records ONLY
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const employee = await Employee.findOne({ 
         email: req.user.email,
         tenantId: req.tenantId 
@@ -70,7 +71,7 @@ exports.getPerformance = async (req, res) => {
     }
 
     // Security Check: If user is Employee, ensure it belongs to them
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const employee = await Employee.findOne({ 
         email: req.user.email,
         tenantId: req.tenantId 

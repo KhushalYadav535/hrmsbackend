@@ -1,6 +1,7 @@
 // Multi-tenant middleware
 // Ensures all queries are scoped to the current tenant
 const mongoose = require('mongoose');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 
 exports.setTenant = (req, res, next) => {
   // Tenant ID should come from authenticated user
@@ -49,7 +50,7 @@ exports.setTenant = (req, res, next) => {
 exports.filterByTenant = (Model) => {
   return async (req, res, next) => {
     // For Super Admin, allow cross-tenant access if tenantId is provided
-    if (req.user.role === 'Super Admin' && req.query.tenantId) {
+    if (userHasRole(req.user, 'Super Admin') && req.query.tenantId) {
       req.tenantId = req.query.tenantId;
     }
 

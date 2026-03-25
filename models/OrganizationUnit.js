@@ -56,17 +56,21 @@ const organizationUnitSchema = new mongoose.Schema({
     comment: 'Parent unit (null for Head Office)',
     validate: {
       validator: function(value) {
-        // HO cannot have parent
-        if (this.unitType === 'HO' && value !== null) {
+        // HO cannot have a parent
+        if (this.unitType === 'HO' && value != null) {
           return false;
         }
-        // Non-HO units must have parent
-        if (this.unitType !== 'HO' && value === null) {
+        // BRANCH: parent optional (e.g. small banks: only HO + branches) or under HO / ZO / RO
+        if (this.unitType === 'BRANCH') {
+          return true;
+        }
+        // All other non-HO types require a parent
+        if (this.unitType !== 'HO' && (value === null || value === undefined)) {
           return false;
         }
         return true;
       },
-      message: 'HO cannot have parent, other units must have parent',
+      message: 'HO cannot have a parent; BRANCH may have no parent; other unit types require a parent',
     },
   },
   unitHeadId: {
@@ -170,11 +174,11 @@ organizationUnitSchema.pre('save', async function() {
       throw new Error('Parent unit not found');
     }
     
-    // Validate hierarchy: ZO → HO, RO → ZO, BRANCH → RO or ZO
+    // Validate hierarchy: ZO → HO; RO → HO or ZO (small banks: regions under HO); BRANCH → HO / ZO / RO or no parent
     const validHierarchy = {
       'ZO': ['HO'],
-      'RO': ['ZO'],
-      'BRANCH': ['RO', 'ZO'], // Branch can be under Region or Zone
+      'RO': ['HO', 'ZO'],
+      'BRANCH': ['HO', 'RO', 'ZO'],
     };
     
     if (validHierarchy[this.unitType] && !validHierarchy[this.unitType].includes(parentUnit.unitType)) {

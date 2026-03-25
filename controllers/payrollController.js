@@ -1,4 +1,5 @@
 const Payroll = require('../models/Payroll');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const Attendance = require('../models/Attendance');
 const LeaveRequest = require('../models/LeaveRequest');
@@ -277,7 +278,7 @@ exports.getPayrolls = async (req, res) => {
     if (status) filter.status = status;
 
     // Security: Employee can only see their own payrolls
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const employee = await Employee.findOne({
         email: req.user.email,
         tenantId: req.tenantId,
@@ -328,7 +329,7 @@ exports.getPayroll = async (req, res) => {
     }
 
     // Security: Employee can only view their own payroll
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const employee = await Employee.findOne({
         email: req.user.email,
         tenantId: req.tenantId,
@@ -360,7 +361,7 @@ exports.getPayroll = async (req, res) => {
 exports.createPayroll = async (req, res) => {
   try {
     // BRD: Payroll Maker-Checker - Only Maker can create payroll (Checker cannot)
-    if (req.user.role === 'Payroll Administrator' && req.user.payrollSubRole === 'Checker') {
+    if (userHasRole(req.user, 'Payroll Administrator') && req.user.payrollSubRole === 'Checker') {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Payroll Checker can only approve/reject, not create. Only Payroll Maker can create.',
@@ -461,7 +462,7 @@ exports.processPayroll = async (req, res) => {
     }
 
     // BRD: Payroll Maker-Checker - Only Maker can process payroll (Checker cannot)
-    if (req.user.role === 'Payroll Administrator') {
+    if (userHasRole(req.user, 'Payroll Administrator')) {
       if (req.user.payrollSubRole === 'Checker') {
         return res.status(403).json({
           success: false,
@@ -469,7 +470,7 @@ exports.processPayroll = async (req, res) => {
         });
       }
       // Maker or null (legacy) can process
-    } else if (req.user.role !== 'Super Admin') {
+    } else if (!userHasRole(req.user, 'Super Admin')) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators (Maker) can process payroll.',
@@ -776,7 +777,7 @@ exports.getPayrollStats = async (req, res) => {
     // Security: Employees and Managers cannot see organization-wide stats
     // They should use individual payroll endpoints
     const adminRoles = ['Payroll Administrator', 'HR Administrator', 'Tenant Admin', 'Finance Administrator', 'Auditor', 'Super Admin'];
-    if (!adminRoles.includes(req.user.role)) {
+    if (!userHasAnyRole(req.user, adminRoles)) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. You do not have permission to view payroll statistics.',
@@ -923,14 +924,14 @@ exports.submitPayroll = async (req, res) => {
     }
 
     // BRD: Payroll Maker-Checker - Only Maker can submit (Checker cannot)
-    if (req.user.role === 'Payroll Administrator') {
+    if (userHasRole(req.user, 'Payroll Administrator')) {
       if (req.user.payrollSubRole === 'Checker') {
         return res.status(403).json({
           success: false,
           message: 'Access denied. Payroll Checker can only approve/reject, not submit. Only Payroll Maker can submit.',
         });
       }
-    } else if (req.user.role !== 'Super Admin') {
+    } else if (!userHasRole(req.user, 'Super Admin')) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only Payroll Administrators (Maker) can submit payroll.',
@@ -1002,7 +1003,7 @@ exports.approvePayroll = async (req, res) => {
     }
 
     // BRD: Payroll Maker-Checker - Only Checker can approve (Maker cannot)
-    if (req.user.role === 'Payroll Administrator') {
+    if (userHasRole(req.user, 'Payroll Administrator')) {
       if (req.user.payrollSubRole === 'Maker') {
         return res.status(403).json({
           success: false,
@@ -1012,9 +1013,7 @@ exports.approvePayroll = async (req, res) => {
       // Checker or null (legacy) can approve
     }
 
-    const canApprove = req.user.role === 'Payroll Administrator' ||
-      req.user.role === 'Finance Administrator' ||
-      req.user.role === 'Super Admin';
+    const canApprove = userHasAnyRole(req.user, ['Payroll Administrator', 'Finance Administrator', 'Super Admin']);
 
     if (!canApprove) {
       return res.status(403).json({
@@ -1062,7 +1061,7 @@ exports.approvePayroll = async (req, res) => {
         comments: req.body.comments || 'Approved by checker',
         timestamp: new Date(),
       });
-    } else if (payroll.status === 'Approved' && req.user.role === 'Finance Administrator') {
+    } else if (payroll.status === 'Approved' && userHasRole(req.user, 'Finance Administrator')) {
       // Final approval by Finance Manager before processing
       payroll.status = 'Processed';
       payroll.financeApproverId = req.user._id;
@@ -1166,7 +1165,7 @@ exports.rejectPayroll = async (req, res) => {
     }
 
     // BRD: Payroll Maker-Checker - Only Checker can reject (Maker cannot)
-    if (req.user.role === 'Payroll Administrator') {
+    if (userHasRole(req.user, 'Payroll Administrator')) {
       if (req.user.payrollSubRole === 'Maker') {
         return res.status(403).json({
           success: false,
@@ -1175,9 +1174,7 @@ exports.rejectPayroll = async (req, res) => {
       }
     }
 
-    const canReject = req.user.role === 'Payroll Administrator' ||
-      req.user.role === 'Finance Administrator' ||
-      req.user.role === 'Super Admin';
+    const canReject = userHasAnyRole(req.user, ['Payroll Administrator', 'Finance Administrator', 'Super Admin']);
 
     if (!canReject) {
       return res.status(403).json({
@@ -1263,7 +1260,7 @@ exports.updatePayroll = async (req, res) => {
     }
 
     // BRD: Payroll Maker-Checker - Only Maker can update payroll (Checker cannot)
-    if (req.user.role === 'Payroll Administrator' && req.user.payrollSubRole === 'Checker') {
+    if (userHasRole(req.user, 'Payroll Administrator') && req.user.payrollSubRole === 'Checker') {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Payroll Checker can only approve/reject, not edit. Only Payroll Maker can update.',
@@ -1346,7 +1343,7 @@ exports.deletePayroll = async (req, res) => {
     }
 
     // BRD: Payroll Maker-Checker - Only Maker can delete payroll (Checker cannot)
-    if (req.user.role === 'Payroll Administrator' && req.user.payrollSubRole === 'Checker') {
+    if (userHasRole(req.user, 'Payroll Administrator') && req.user.payrollSubRole === 'Checker') {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Payroll Checker can only approve/reject, not delete. Only Payroll Maker can delete.',
@@ -1418,9 +1415,7 @@ exports.finalizePayroll = async (req, res) => {
     }
 
     // Check permissions
-    const canFinalize = req.user.role === 'Finance Administrator' ||
-      req.user.role === 'Payroll Administrator' ||
-      req.user.role === 'Super Admin';
+    const canFinalize = userHasAnyRole(req.user, ['Finance Administrator', 'Payroll Administrator', 'Super Admin']);
 
     if (!canFinalize) {
       return res.status(403).json({

@@ -1,4 +1,5 @@
 const Course = require('../models/Course');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const TrainingAssignment = require('../models/TrainingAssignment');
 const TrainingCalendar = require('../models/TrainingCalendar');
 const Certificate = require('../models/Certificate');
@@ -306,7 +307,7 @@ exports.getCertificates = asyncHandler(async (req, res) => {
 
   if (employeeId) {
     query.employeeId = employeeId;
-  } else if (req.user.role === 'Employee') {
+  } else if (userHasRole(req.user, 'Employee')) {
     const employee = await Employee.findOne({
       tenantId: req.tenantId,
       _id: req.user.employeeId,

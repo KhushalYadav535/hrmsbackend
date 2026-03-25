@@ -1,4 +1,5 @@
 const Employee = require('../models/Employee');
+const { userHasRole, userHasAnyRole, useNarrowEmployeeScope } = require('../utils/userRoles');
 const AuditLog = require('../models/AuditLog');
 const EmployeeBankAccount = require('../models/EmployeeBankAccount');
 const EmployeeEmergencyContact = require('../models/EmployeeEmergencyContact');
@@ -18,17 +19,10 @@ exports.getEmployees = async (req, res) => {
     // Security: Restrict Employee access
     let projection = null;
     const adminRoles = ['Super Admin', 'Tenant Admin', 'HR Administrator', 'Payroll Administrator', 'Finance Administrator', 'Manager', 'Auditor'];
-    const isAdmin = adminRoles.includes(req.user.role);
-    
-    if (req.user.role === 'Employee') {
-      // Employees can only see active employees and limited fields
-      filter.status = 'Active'; // Use exact enum value
-      projection = 'firstName lastName department designation avatar email employeeCode';
-    } else if (isAdmin) {
-      // Admin roles (HR, Tenant Admin, etc.) can see ALL employees regardless of status
-      // Only apply status filter if explicitly provided in query
+    const isAdmin = userHasAnyRole(req.user, adminRoles);
+
+    if (isAdmin) {
       if (status && status !== 'all' && status !== '') {
-        // Map common status values to enum values
         const statusMap = {
           'active': 'Active',
           'inactive': 'Inactive',
@@ -37,8 +31,10 @@ exports.getEmployees = async (req, res) => {
         };
         filter.status = statusMap[status.toLowerCase()] || status;
       }
-      // No projection - admins see all fields (including employeeCode)
       projection = null;
+    } else if (useNarrowEmployeeScope(req.user)) {
+      filter.status = 'Active';
+      projection = 'firstName lastName department designation avatar email employeeCode';
     }
 
     if (department && department !== 'all' && department !== '') filter.department = department;
@@ -97,7 +93,7 @@ exports.getEmployees = async (req, res) => {
 exports.getEmployee = async (req, res) => {
   try {
     // Security: Check if employee is accessing own profile or allowed to view others
-    if (req.user.role === 'Employee') {
+    if (useNarrowEmployeeScope(req.user)) {
        // Get current employee ID
        const currentEmployee = await Employee.findOne({ email: req.user.email, tenantId: req.tenantId });
        

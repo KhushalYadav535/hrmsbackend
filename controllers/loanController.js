@@ -1,4 +1,5 @@
 const Loan = require('../models/Loan');
+const { userHasRole, userHasAnyRole, useNarrowEmployeeScope } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 
@@ -10,8 +11,7 @@ exports.getLoans = async (req, res) => {
     const { employeeId, status, loanType } = req.query;
     const filter = { tenantId: req.tenantId };
 
-    // Security: Employee can only see their own loans
-    if (req.user.role === 'Employee') {
+    if (useNarrowEmployeeScope(req.user)) {
       const employee = await Employee.findOne({
         email: req.user.email,
         tenantId: req.tenantId,
@@ -85,9 +85,7 @@ exports.getLoanDeductions = async (employeeId, tenantId) => {
 exports.createLoan = async (req, res) => {
   try {
     // BRD Requirement: Only HR/Finance Admin can create loans
-    if (req.user.role !== 'HR Administrator' && 
-        req.user.role !== 'Finance Administrator' && 
-        req.user.role !== 'Super Admin') {
+    if (!userHasAnyRole(req.user, ['HR Administrator', 'Finance Administrator', 'Super Admin'])) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. Only HR and Finance Administrators can create loans.',

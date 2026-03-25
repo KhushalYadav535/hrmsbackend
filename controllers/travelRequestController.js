@@ -1,4 +1,5 @@
 const TravelRequest = require('../models/TravelRequest');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const TravelPolicy = require('../models/TravelPolicy');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
@@ -14,7 +15,7 @@ exports.getTravelRequests = async (req, res) => {
     const filter = { tenantId: req.tenantId };
 
     // Security: If user is Employee, restrict to their own records ONLY
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const employee = await Employee.findOne({
         email: req.user.email,
         tenantId: req.tenantId
@@ -36,7 +37,7 @@ exports.getTravelRequests = async (req, res) => {
     if (travelType) filter.travelType = travelType;
 
     // Manager can see team member travel requests
-    if (req.user.role === 'Manager' && !employeeId) {
+    if (userHasRole(req.user, 'Manager') && !employeeId) {
       const teamMembers = await Employee.find({
         tenantId: req.tenantId,
         reportingManager: req.user._id,

@@ -1,4 +1,5 @@
 const AppraisalDispute = require('../models/AppraisalDispute');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 const { sendNotification } = require('../utils/notificationService');
@@ -46,7 +47,7 @@ exports.getDisputes = async (req, res) => {
         if (status) filter.status = status;
         if (appraisalCycleId) filter.appraisalCycleId = appraisalCycleId;
 
-        if (req.user.role === 'Employee') {
+        if (userHasRole(req.user, 'Employee')) {
             const emp = await Employee.findOne({ email: req.user.email, tenantId: req.tenantId });
             if (!emp) return res.status(404).json({ success: false, message: 'Employee not found' });
             filter.employeeId = emp._id;
@@ -77,7 +78,7 @@ exports.getDispute = async (req, res) => {
         if (!dispute) return res.status(404).json({ success: false, message: 'Dispute not found' });
 
         // Employee can only view their own
-        if (req.user.role === 'Employee' && dispute.employeeId.email !== req.user.email) {
+        if (userHasRole(req.user, 'Employee') && dispute.employeeId.email !== req.user.email) {
             const emp = await Employee.findOne({ email: req.user.email, tenantId: req.tenantId });
             if (!emp || emp._id.toString() !== dispute.employeeId._id.toString()) {
                 return res.status(403).json({ success: false, message: 'Not authorized' });

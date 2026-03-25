@@ -1,4 +1,5 @@
 const Grievance = require('../models/Grievance');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
@@ -140,7 +141,7 @@ exports.getGrievance = asyncHandler(async (req, res) => {
   }
 
   // Check access: Employee can only see own grievances
-  if (req.user.role === 'Employee' && grievance.employeeId._id.toString() !== req.user.employeeId?.toString()) {
+  if (userHasRole(req.user, 'Employee') && grievance.employeeId._id.toString() !== req.user.employeeId?.toString()) {
     return res.status(403).json({
       success: false,
       message: 'Access denied',
@@ -178,7 +179,7 @@ exports.getAllGrievances = asyncHandler(async (req, res) => {
   if (slaStatus) query.slaStatus = slaStatus;
 
   // Manager can only see grievances from their team
-  if (req.user.role === 'Manager' && req.user.employeeId) {
+  if (userHasRole(req.user, 'Manager') && req.user.employeeId) {
     const manager = await Employee.findById(req.user.employeeId);
     if (manager) {
       const teamMembers = await Employee.find({
@@ -279,7 +280,7 @@ exports.addComment = asyncHandler(async (req, res) => {
   }
 
   // Check access
-  if (req.user.role === 'Employee' && grievance.employeeId.toString() !== req.user.employeeId?.toString()) {
+  if (userHasRole(req.user, 'Employee') && grievance.employeeId.toString() !== req.user.employeeId?.toString()) {
     return res.status(403).json({
       success: false,
       message: 'Access denied',
@@ -423,7 +424,7 @@ exports.getDashboardStats = asyncHandler(async (req, res) => {
   const query = { tenantId: req.tenantId };
 
   // Manager can only see stats for their team
-  if (req.user.role === 'Manager' && req.user.employeeId) {
+  if (userHasRole(req.user, 'Manager') && req.user.employeeId) {
     const manager = await Employee.findById(req.user.employeeId);
     if (manager) {
       const teamMembers = await Employee.find({

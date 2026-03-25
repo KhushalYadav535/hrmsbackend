@@ -1,4 +1,5 @@
 const Expense = require('../models/Expense');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 
 // @desc    Get all expenses
 // @route   GET /api/expenses
@@ -13,7 +14,7 @@ exports.getExpenses = async (req, res) => {
     if (category) filter.category = category;
 
     // If manager, show team member expenses
-    if (req.user.role === 'Manager' && !employeeId) {
+    if (userHasRole(req.user, 'Manager') && !employeeId) {
       const Employee = require('../models/Employee');
       const teamMembers = await Employee.find({
         tenantId: req.tenantId,

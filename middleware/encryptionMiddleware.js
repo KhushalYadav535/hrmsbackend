@@ -7,6 +7,7 @@
  */
 
 const { encryptEmployeeFields, decryptEmployeeFields, maskedEmployeeFields } = require('../utils/fieldEncryption');
+const { userHasAnyRole } = require('../utils/userRoles');
 
 /**
  * Middleware: Encrypt sensitive fields in req.body before controller
@@ -25,7 +26,7 @@ function encryptBody(req, res, next) {
 function maskResponseMiddleware(privilegedRoles = ['Tenant Admin', 'HR Administrator', 'Payroll Administrator']) {
     return (req, res, next) => {
         const originalJson = res.json.bind(res);
-        const isPrivileged = privilegedRoles.includes(req.user?.role);
+        const isPrivileged = req.user ? userHasAnyRole(req.user, privilegedRoles) : false;
 
         res.json = function (data) {
             try {

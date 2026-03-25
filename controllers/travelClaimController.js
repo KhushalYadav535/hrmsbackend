@@ -1,4 +1,5 @@
 const TravelClaim = require('../models/TravelClaim');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const TravelRequest = require('../models/TravelRequest');
 const TravelAdvance = require('../models/TravelAdvance');
 const TravelPolicy = require('../models/TravelPolicy');
@@ -20,7 +21,7 @@ exports.getTravelClaims = async (req, res) => {
     if (claimType) filter.claimType = claimType;
 
     // Employee sees only their claims
-    if (req.user.role === 'Employee') {
+    if (userHasRole(req.user, 'Employee')) {
       const employee = await Employee.findOne({ 
         email: req.user.email,
         tenantId: req.tenantId 

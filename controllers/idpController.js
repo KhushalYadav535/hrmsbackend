@@ -1,4 +1,5 @@
 const IDP = require('../models/IDP');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -16,7 +17,7 @@ exports.getIDPs = asyncHandler(async (req, res) => {
   if (status) filter.status = status;
 
   // Employee sees only their IDPs
-  if (req.user.role === 'Employee') {
+  if (userHasRole(req.user, 'Employee')) {
     const employee = await Employee.findOne({
       email: req.user.email,
       tenantId: req.tenantId,
@@ -25,7 +26,7 @@ exports.getIDPs = asyncHandler(async (req, res) => {
   }
 
   // Manager sees their team IDPs
-  if (req.user.role === 'Manager' && !managerId) {
+  if (userHasRole(req.user, 'Manager') && !managerId) {
     filter.managerId = req.user._id;
   }
 

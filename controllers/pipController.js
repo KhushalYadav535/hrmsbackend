@@ -1,4 +1,5 @@
 const PIP = require('../models/PIP');
+const { userHasRole, userHasAnyRole } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 const { sendNotification } = require('../utils/notificationService');
@@ -17,7 +18,7 @@ exports.getPIPs = asyncHandler(async (req, res) => {
   if (status) filter.status = status;
 
   // Employee sees only their PIPs
-  if (req.user.role === 'Employee') {
+  if (userHasRole(req.user, 'Employee')) {
     const employee = await Employee.findOne({
       email: req.user.email,
       tenantId: req.tenantId,
@@ -26,7 +27,7 @@ exports.getPIPs = asyncHandler(async (req, res) => {
   }
 
   // Manager sees their team PIPs
-  if (req.user.role === 'Manager' && !managerId) {
+  if (userHasRole(req.user, 'Manager') && !managerId) {
     filter.managerId = req.user._id;
   }
 
@@ -58,7 +59,7 @@ exports.createPIP = asyncHandler(async (req, res) => {
   }
 
   // Validate manager is reporting manager
-  if (employee.reportingManager?.toString() !== req.user._id.toString() && req.user.role !== 'HR Administrator' && req.user.role !== 'Tenant Admin') {
+  if (employee.reportingManager?.toString() !== req.user._id.toString() && !userHasRole(req.user, 'HR Administrator') && !userHasRole(req.user, 'Tenant Admin')) {
     return res.status(403).json({
       success: false,
       message: 'You are not authorized to create PIP for this employee',
