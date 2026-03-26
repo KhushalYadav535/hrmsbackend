@@ -14,7 +14,7 @@ const ROLE_ENUM = [
   'Auditor',
 ];
 
-/** Higher index = stronger for "primary" display / JWT convenience only */
+/** Lower index in ROLE_ENUM = higher privilege (used for legacy single `role` / display). */
 const ROLE_RANK = ROLE_ENUM.reduce((acc, r, i) => {
   acc[r] = i;
   return acc;
@@ -26,9 +26,10 @@ function normalizeRoles(user) {
     user.roles && Array.isArray(user.roles) && user.roles.length > 0
       ? user.roles.filter((r) => r && ROLE_ENUM.includes(r))
       : [];
-  if (fromArr.length) return [...new Set(fromArr)];
-  if (user.role && ROLE_ENUM.includes(user.role)) return [user.role];
-  return [];
+  const fromLegacy =
+    user.role && ROLE_ENUM.includes(user.role) ? [user.role] : [];
+  const merged = [...new Set([...fromArr, ...fromLegacy])];
+  return merged;
 }
 
 function userHasRole(user, role) {
@@ -44,7 +45,7 @@ function userHasAnyRole(user, roles) {
 function primaryRole(user) {
   const rs = normalizeRoles(user);
   if (!rs.length) return user && user.role ? user.role : 'Employee';
-  return rs.reduce((best, r) => (ROLE_RANK[r] > ROLE_RANK[best] ? r : best), rs[0]);
+  return rs.reduce((best, r) => (ROLE_RANK[r] < ROLE_RANK[best] ? r : best), rs[0]);
 }
 
 /**

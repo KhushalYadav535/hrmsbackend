@@ -91,8 +91,7 @@ const userSchema = new mongoose.Schema({
   },
   /** Additional roles beyond `role` (union of all hats). Kept in sync in pre-save. */
   roles: {
-    type: [String],
-    enum: ROLE_ENUM,
+    type: [{ type: String, enum: ROLE_ENUM }],
     default: undefined,
   },
   // BRD: Payroll Maker-Checker - Tenant Admin assigns Maker or Checker for Payroll Administrator
@@ -271,13 +270,13 @@ userSchema.pre('save', async function (next) {
   }
 });
 
-// Multi-role: normalize `roles[]` and set legacy `role` to highest-ranked entry
+// Multi-role: normalize `roles[]` and set legacy `role` to highest-privilege entry (lowest ROLE_ENUM index)
 userSchema.pre('save', function (next) {
   if (this.roles && Array.isArray(this.roles) && this.roles.length > 0) {
     this.roles = [...new Set(this.roles.filter((r) => ROLE_ENUM.includes(r)))];
     if (this.roles.length) {
       this.role = this.roles.reduce(
-        (best, r) => (ROLE_RANK[r] > ROLE_RANK[best] ? r : best),
+        (best, r) => (ROLE_RANK[r] < ROLE_RANK[best] ? r : best),
         this.roles[0]
       );
     }

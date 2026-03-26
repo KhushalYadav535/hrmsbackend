@@ -1,5 +1,13 @@
+const mongoose = require('mongoose');
 const Employee = require('../models/Employee');
-const { userHasRole, userHasAnyRole, useNarrowEmployeeScope } = require('../utils/userRoles');
+const Designation = require('../models/Designation');
+const {
+  userHasRole,
+  userHasAnyRole,
+  useNarrowEmployeeScope,
+  ELEVATED_SCOPE_ROLES,
+  ROLE_ENUM,
+} = require('../utils/userRoles');
 const AuditLog = require('../models/AuditLog');
 const EmployeeBankAccount = require('../models/EmployeeBankAccount');
 const EmployeeEmergencyContact = require('../models/EmployeeEmergencyContact');
@@ -7,6 +15,40 @@ const EmployeeNominee = require('../models/EmployeeNominee');
 const EmployeePreviousEmployment = require('../models/EmployeePreviousEmployment');
 const EmployeeFamilyDetail = require('../models/EmployeeFamilyDetail');
 const { maskEmployeeData, maskBankAccountData, maskArray } = require('../utils/masking');
+
+/** Designation is stored as ObjectId (or legacy string). Mixed schema has no ref — resolve names for API clients. */
+function designationLookupKey(raw) {
+  if (raw == null) return null;
+  if (typeof raw === 'object' && raw._id != null) {
+    return raw._id.toString();
+  }
+  const s = String(raw);
+  if (/^[a-fA-F0-9]{24}$/.test(s) && mongoose.Types.ObjectId.isValid(s)) {
+    return s;
+  }
+  return null;
+}
+
+async function attachDesignationNames(employeePlainObjects, tenantId) {
+  const list = Array.isArray(employeePlainObjects)
+    ? employeePlainObjects
+    : [employeePlainObjects];
+  const idSet = new Set();
+  for (const e of list) {
+    const key = designationLookupKey(e.designation);
+    if (key) idSet.add(key);
+  }
+  if (idSet.size === 0) return;
+  const ids = [...idSet].map((id) => new mongoose.Types.ObjectId(id));
+  const rows = await Designation.find({ tenantId, _id: { $in: ids } }).select('name').lean();
+  const map = Object.fromEntries(rows.map((r) => [r._id.toString(), r]));
+  for (const e of list) {
+    const key = designationLookupKey(e.designation);
+    if (key && map[key]) {
+      e.designation = { _id: map[key]._id, name: map[key].name };
+    }
+  }
+}
 
 // @desc    Get all employees
 // @route   GET /api/employees
@@ -69,8 +111,9 @@ exports.getEmployees = async (req, res) => {
       console.log(`[getEmployees] Role: ${req.user.role}, Tenant: ${req.tenantId}, Filter:`, JSON.stringify(filter), `Found: 0 employees`);
     }
     
-    // Mask sensitive data for all employees
-    const maskedEmployees = employees.map(emp => maskEmployeeData(emp.toObject()));
+    const plainEmployees = employees.map((emp) => emp.toObject());
+    await attachDesignationNames(plainEmployees, req.tenantId);
+    const maskedEmployees = plainEmployees.map((emp) => maskEmployeeData(emp));
     
     res.status(200).json({
       success: true,
@@ -107,8 +150,10 @@ exports.getEmployee = async (req, res) => {
           if (!employee) {
             return res.status(404).json({ success: false, message: 'Employee not found' });
           }
-          
-          return res.status(200).json({ success: true, data: employee });
+
+          const peerData = employee.toObject();
+          await attachDesignationNames(peerData, req.tenantId);
+          return res.status(200).json({ success: true, data: peerData });
        }
     }
 
@@ -135,6 +180,7 @@ exports.getEmployee = async (req, res) => {
 
     // Convert employee to object and add related data
     const employeeData = employee.toObject();
+    await attachDesignationNames(employeeData, req.tenantId);
     employeeData.bankAccounts = maskArray(bankAccounts, maskBankAccountData);
     employeeData.emergencyContacts = emergencyContacts;
     employeeData.nominees = nominees;
@@ -287,7 +333,23 @@ exports.createEmployee = async (req, res) => {
       if (existingUser) {
         existingUser.name = userName;
         existingUser.password = password;
-        existingUser.role = 'Employee';
+        // Do not downgrade Tenant Admin / Finance / HR / etc. when linking an employee record
+        const hadElevatedRole = userHasAnyRole(existingUser, ELEVATED_SCOPE_ROLES);
+        if (!hadElevatedRole) {
+          existingUser.role = 'Employee';
+          existingUser.roles = ['Employee'];
+        } else {
+          const base =
+            Array.isArray(existingUser.roles) && existingUser.roles.length > 0
+              ? [...existingUser.roles]
+              : existingUser.role && ROLE_ENUM.includes(existingUser.role)
+                ? [existingUser.role]
+                : [];
+          const merged = [...new Set([...base, 'Employee'])].filter((r) => ROLE_ENUM.includes(r));
+          if (merged.length) {
+            existingUser.roles = merged;
+          }
+        }
         existingUser.designation = designationStr;
         existingUser.department = department.trim();
         existingUser.status = 'Active';
@@ -354,8 +416,9 @@ exports.createEmployee = async (req, res) => {
       console.error('Failed to create audit log:', auditError);
     }
 
-    // Mask sensitive data before sending response
-    const maskedEmployee = maskEmployeeData(employee.toObject());
+    const createdPlain = employee.toObject();
+    await attachDesignationNames(createdPlain, req.tenantId);
+    const maskedEmployee = maskEmployeeData(createdPlain);
 
     res.status(201).json({
       success: true,
@@ -442,8 +505,9 @@ exports.updateEmployee = async (req, res) => {
       console.error('Failed to create audit log:', auditError);
     }
 
-    // Mask sensitive data before sending response
-    const maskedEmployee = maskEmployeeData(employee.toObject());
+    const updatedPlain = employee.toObject();
+    await attachDesignationNames(updatedPlain, req.tenantId);
+    const maskedEmployee = maskEmployeeData(updatedPlain);
 
     res.status(200).json({
       success: true,

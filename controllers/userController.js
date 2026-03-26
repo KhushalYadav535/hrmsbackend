@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { userHasRole, primaryRole, ROLE_ENUM } = require('../utils/userRoles');
+const { userHasRole, primaryRole, ROLE_ENUM, normalizeRoles } = require('../utils/userRoles');
 const Employee = require('../models/Employee');
 const { generateEmployeeId } = require('../services/employeeIdService');
 const { createAuditLog } = require('../utils/auditLog');
@@ -88,6 +88,8 @@ exports.createUser = asyncHandler(async (req, res) => {
 
   const userResponse = user.toObject();
   delete userResponse.password;
+  userResponse.roles = normalizeRoles(user);
+  userResponse.role = primaryRole(user);
 
   res.status(201).json({
     success: true,
@@ -141,10 +143,17 @@ exports.getUsers = asyncHandler(async (req, res) => {
       .select('-password') // Exclude password
       .sort({ createdAt: -1 });
 
+    const data = users.map((doc) => {
+      const o = doc.toObject();
+      o.roles = normalizeRoles(doc);
+      o.role = primaryRole(doc);
+      return o;
+    });
+
     res.status(200).json({
       success: true,
-      count: users.length,
-      data: users,
+      count: data.length,
+      data,
     });
   } catch (error) {
     res.status(500).json({
@@ -172,9 +181,14 @@ exports.getUser = asyncHandler(async (req, res) => {
       });
     }
 
+    const u = user.toObject();
+    delete u.password;
+    u.roles = normalizeRoles(user);
+    u.role = primaryRole(user);
+
     res.status(200).json({
       success: true,
-      data: user,
+      data: u,
     });
   } catch (error) {
     res.status(500).json({
@@ -206,20 +220,30 @@ exports.updateUser = asyncHandler(async (req, res) => {
 
     const rolePayload = Array.isArray(roles) && roles.length > 0;
     const singleRolePayload = role != null && role !== '';
+    const existingNorm = normalizeRoles(user);
+    const tenantCanSetRoles = userHasRole(req.user, 'Tenant Admin');
 
-    // Only Tenant Admin can change roles
-    if ((rolePayload || singleRolePayload) && !userHasRole(req.user, 'Tenant Admin')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Only Tenant Admin can change user roles',
-      });
+    let proposedNorm = null;
+    if (tenantCanSetRoles) {
+      if (rolePayload) {
+        proposedNorm = [...new Set(roles.filter((r) => ROLE_ENUM.includes(r)))];
+      } else if (singleRolePayload) {
+        proposedNorm = [role];
+      }
+    } else if (rolePayload || singleRolePayload) {
+      const attempted = rolePayload
+        ? [...new Set(roles.filter((r) => ROLE_ENUM.includes(r)))]
+        : [role];
+      const same =
+        attempted.length === existingNorm.length &&
+        attempted.every((r) => existingNorm.includes(r));
+      if (!same) {
+        return res.status(403).json({
+          success: false,
+          message: 'Only Tenant Admin can change user roles',
+        });
+      }
     }
-
-    const proposedNorm = rolePayload
-      ? [...new Set(roles.filter((r) => ROLE_ENUM.includes(r)))]
-      : singleRolePayload
-        ? [role]
-        : null;
 
     if (
       proposedNorm &&
@@ -235,6 +259,7 @@ exports.updateUser = asyncHandler(async (req, res) => {
     if (name) user.name = name;
     if (proposedNorm && proposedNorm.length) {
       user.roles = proposedNorm;
+      user.role = primaryRole({ roles: proposedNorm });
     }
     if (designation) user.designation = designation;
     if (department) user.department = department;
@@ -249,6 +274,8 @@ exports.updateUser = asyncHandler(async (req, res) => {
 
     const userResponse = user.toObject();
     delete userResponse.password;
+    userResponse.roles = normalizeRoles(user);
+    userResponse.role = primaryRole(user);
 
     res.status(200).json({
       success: true,

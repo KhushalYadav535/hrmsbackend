@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { userHasRole, userHasAnyRole, normalizeRoles } = require('../utils/userRoles');
+const { userHasRole, userHasAnyRole, normalizeRoles, primaryRole } = require('../utils/userRoles');
 const Tenant = require('../models/Tenant');
 const AuditLog = require('../models/AuditLog');
 const generateToken = require('../utils/generateToken');
@@ -398,7 +398,7 @@ exports.login = asyncHandler(async (req, res) => {
         id: user._id.toString(),
         email: user.email,
         name: user.name,
-        role: user.role,
+        role: primaryRole(user),
         roles: normalizeRoles(user),
         payrollSubRole: user.payrollSubRole || null,
         tenantId: user.tenantId && user.tenantId._id ? user.tenantId._id.toString() : (user.tenantId ? user.tenantId.toString() : null),
@@ -517,7 +517,7 @@ exports.verifyMFA = asyncHandler(async (req, res) => {
       id: user._id.toString(),
       email: user.email,
       name: user.name,
-      role: user.role,
+      role: primaryRole(user),
       roles: normalizeRoles(user),
       tenantId: user.tenantId.toString(),
     },
@@ -618,9 +618,20 @@ exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).populate('tenantId').select('-password');
 
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    const data = typeof user.toObject === 'function' ? user.toObject() : { ...user };
+    data.role = primaryRole(user);
+    data.roles = normalizeRoles(user);
+
     res.status(200).json({
       success: true,
-      data: user,
+      data,
     });
   } catch (error) {
     res.status(500).json({
