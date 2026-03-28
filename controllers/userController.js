@@ -221,7 +221,8 @@ exports.updateUser = asyncHandler(async (req, res) => {
     const rolePayload = Array.isArray(roles) && roles.length > 0;
     const singleRolePayload = role != null && role !== '';
     const existingNorm = normalizeRoles(user);
-    const tenantCanSetRoles = userHasRole(req.user, 'Tenant Admin');
+    const tenantCanSetRoles =
+      userHasRole(req.user, 'Tenant Admin') || userHasRole(req.user, 'HR Administrator');
 
     let proposedNorm = null;
     if (tenantCanSetRoles) {
@@ -240,9 +241,22 @@ exports.updateUser = asyncHandler(async (req, res) => {
       if (!same) {
         return res.status(403).json({
           success: false,
-          message: 'Only Tenant Admin can change user roles',
+          message: 'Only Tenant Admin or HR Administrator can change user roles',
         });
       }
+    }
+
+    const isHrOnly =
+      userHasRole(req.user, 'HR Administrator') && !userHasRole(req.user, 'Tenant Admin');
+    if (
+      isHrOnly &&
+      proposedNorm &&
+      (proposedNorm.includes('Tenant Admin') || proposedNorm.includes('Super Admin'))
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only Tenant Admin can assign Tenant Admin or Super Admin roles',
+      });
     }
 
     if (

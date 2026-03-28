@@ -4,6 +4,7 @@ const LeavePolicy = require('../models/LeavePolicy');
 const Employee = require('../models/Employee');
 const AuditLog = require('../models/AuditLog');
 const mongoose = require('mongoose');
+const { isNoAccrualFrequency, HALF_YEARLY_ACCRUAL_MONTHS } = require('../utils/leavePolicyAccrual');
 
 // @desc    Accrue leaves for all employees (scheduled job - run on 1st of every month)
 // @route   POST /api/leaves/accrue
@@ -68,8 +69,7 @@ exports.accrueLeaves = async (req, res) => {
           const accrualFrequency = policy.accrualFrequency || 'Monthly';
           const accrualRate = policy.accrualRate || (policy.daysPerYear / 12);
           
-          if (accrualFrequency === 'None') {
-            // No accrual for this policy
+          if (isNoAccrualFrequency(accrualFrequency)) {
             continue;
           } else if (accrualFrequency === 'Monthly') {
             accrualDays = accrualRate;
@@ -84,6 +84,10 @@ exports.accrueLeaves = async (req, res) => {
             // Only accrue on quarter start months (Jan, Apr, Jul, Oct)
             const quarterStartMonths = [0, 3, 6, 9]; // 0-indexed
             if (quarterStartMonths.includes(accrualDate.getMonth())) {
+              accrualDays = accrualRate;
+            }
+          } else if (accrualFrequency === 'Half Yearly') {
+            if (HALF_YEARLY_ACCRUAL_MONTHS.includes(accrualDate.getMonth())) {
               accrualDays = accrualRate;
             }
           } else if (accrualFrequency === 'Yearly') {

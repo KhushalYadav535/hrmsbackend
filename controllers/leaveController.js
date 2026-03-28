@@ -7,6 +7,7 @@ const AuditLog = require('../models/AuditLog');
 const { updateLeaveBalance } = require('./leaveAccrualController');
 const { sendNotification } = require('../utils/notificationService');
 const mongoose = require('mongoose');
+const { isNoAccrualFrequency } = require('../utils/leavePolicyAccrual');
 
 // @desc    Get all leave requests
 // @route   GET /api/leaves
@@ -231,8 +232,24 @@ exports.getLeaveBalance = async (req, res) => {
             if (currentDate >= fyAccrualDate) {
               accruedDays = accrualRate;
             }
-          } else if (accrualFrequency === 'None') {
-            // No accrual - show full entitlement at once
+          } else if (accrualFrequency === 'Half Yearly') {
+            const monthsSinceFYStart =
+              (currentDate.getFullYear() - fyStart.getFullYear()) * 12 +
+              (currentDate.getMonth() - fyStart.getMonth());
+            const halvesSinceFYStart = Math.floor(Math.max(0, monthsSinceFYStart) / 6);
+            const halfYearStartMonth = Math.floor(currentDate.getMonth() / 6) * 6;
+            const currentHalfStart = new Date(
+              currentDate.getFullYear(),
+              halfYearStartMonth,
+              accrualDate,
+            );
+            if (currentDate >= currentHalfStart && fyStart <= currentHalfStart) {
+              accruedDays = accrualRate * (halvesSinceFYStart + 1);
+            } else {
+              accruedDays = accrualRate * halvesSinceFYStart;
+            }
+          } else if (isNoAccrualFrequency(accrualFrequency)) {
+            // No periodic accrual — show full entitlement at once
             accruedDays = policy.daysPerYear;
           }
 
@@ -291,6 +308,10 @@ exports.getLeaveBalance = async (req, res) => {
           maxCarryForward: policy.maxCarryForward || 0,
           accrualFrequency: policy.accrualFrequency,
           accrualRate: policy.accrualRate,
+          allowEncashment: !!policy.allowEncashment,
+          allowHalfDay: !!policy.allowHalfDay,
+          requiresMedicalCertificate: !!policy.requiresMedicalCertificate,
+          medicalCertificateAfterDays: policy.medicalCertificateAfterDays ?? 3,
         };
       })
     );
@@ -367,16 +388,6 @@ exports.createLeave = async (req, res) => {
     const diffTime = Math.abs(end - start);
     const diffDays = isHalfDayLeave ? 0.5 : Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 
-    // BRD Requirement: Medical certificate validation for sick leave > 3 days
-    if (normalizedLeaveType.toLowerCase().includes('sick') && diffDays > 3) {
-      if (!req.body.medicalCertificate || !req.body.medicalCertificate.url) {
-        return res.status(400).json({
-          success: false,
-          message: 'Medical certificate is required for sick leave exceeding 3 days',
-        });
-      }
-    }
-
     // BRD Requirement: Sandwich leave detection
     let isSandwichLeave = false;
     let sandwichDetails = null;
@@ -446,6 +457,32 @@ exports.createLeave = async (req, res) => {
       
       // Use the found policy (with correct casing)
       leavePolicy = caseInsensitivePolicy;
+    }
+
+    if (isHalfDayLeave && !leavePolicy.allowHalfDay) {
+      return res.status(400).json({
+        success: false,
+        message: 'Half-day leave is not enabled for this leave type.',
+      });
+    }
+
+    if (leavePolicy.requiresMedicalCertificate) {
+      const threshold = leavePolicy.medicalCertificateAfterDays ?? 3;
+      if (diffDays > threshold) {
+        if (!req.body.medicalCertificate || !req.body.medicalCertificate.url) {
+          return res.status(400).json({
+            success: false,
+            message: `Medical certificate is required when ${leavePolicy.leaveType} exceeds ${threshold} day(s)`,
+          });
+        }
+      }
+    } else if (normalizedLeaveType.toLowerCase().includes('sick') && diffDays > 3) {
+      if (!req.body.medicalCertificate || !req.body.medicalCertificate.url) {
+        return res.status(400).json({
+          success: false,
+          message: 'Medical certificate is required for sick leave exceeding 3 days',
+        });
+      }
     }
 
     // Check leave balance - calculate based on accrual settings
@@ -521,7 +558,23 @@ exports.createLeave = async (req, res) => {
           if (currentDate >= fyAccrualDate) {
             accruedDays = accrualRate;
           }
-        } else if (accrualFrequency === 'None') {
+        } else if (accrualFrequency === 'Half Yearly') {
+          const monthsSinceFYStart =
+            (currentDate.getFullYear() - fyStart.getFullYear()) * 12 +
+            (currentDate.getMonth() - fyStart.getMonth());
+          const halvesSinceFYStart = Math.floor(Math.max(0, monthsSinceFYStart) / 6);
+          const halfYearStartMonth = Math.floor(currentDate.getMonth() / 6) * 6;
+          const currentHalfStart = new Date(
+            currentDate.getFullYear(),
+            halfYearStartMonth,
+            accrualDate,
+          );
+          if (currentDate >= currentHalfStart && fyStart <= currentHalfStart) {
+            accruedDays = accrualRate * (halvesSinceFYStart + 1);
+          } else {
+            accruedDays = accrualRate * halvesSinceFYStart;
+          }
+        } else if (isNoAccrualFrequency(accrualFrequency)) {
           accruedDays = leavePolicy.daysPerYear;
         }
 

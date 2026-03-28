@@ -75,17 +75,28 @@ function generatePortalToken() {
 }
 
 /**
- * Generate temporary password for portal access
+ * Generate temporary password for admin reset / invite.
+ * Must satisfy User model strict policy for non–admin-provisioned saves:
+ * ≥12 chars, upper, lower, digit, special (@$!%*?&).
  */
 function generateTemporaryPassword() {
   const crypto = require('crypto');
-  // Generate 12-character password with uppercase, lowercase, numbers
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let password = '';
-  for (let i = 0; i < 12; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const lower = 'abcdefghijklmnopqrstuvwxyz';
+  const digits = '0123456789';
+  const special = '@$!%*?&';
+  const all = upper + lower + digits + special;
+  const pick = (set) => set[crypto.randomInt(0, set.length)];
+  let password = pick(upper) + pick(lower) + pick(digits) + pick(special);
+  while (password.length < 14) {
+    password += pick(all);
   }
-  return password;
+  const arr = password.split('');
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = crypto.randomInt(0, i + 1);
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.join('');
 }
 
 module.exports = {

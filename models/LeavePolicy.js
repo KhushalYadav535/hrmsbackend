@@ -78,9 +78,15 @@ const leavePolicySchema = new mongoose.Schema({
   },
   accrualFrequency: {
     type: String,
-    enum: ['Monthly', 'Quarterly', 'Yearly', 'None'],
+    enum: ['Monthly', 'Quarterly', 'Half Yearly', 'Yearly', 'None', 'Not Applicable'],
     default: 'Monthly',
-    comment: 'How often leaves are accrued: Monthly, Quarterly, Yearly, or None',
+    comment:
+      'How often leaves are accrued. None / Not Applicable = full entitlement upfront.',
+  },
+  // Eligible for cash conversion of unused balance (policy flag for encashment workflows)
+  allowEncashment: {
+    type: Boolean,
+    default: false,
   },
   accrualRate: {
     type: Number,
