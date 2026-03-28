@@ -263,10 +263,35 @@ exports.applySubscriptionPackage = async (req, res) => {
  */
 exports.getMyCompanyModules = async (req, res) => {
   try {
-    const tenantId = req.user.tenantId;
+    const tenantId = req.user.tenantId?._id || req.user.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({ success: false, message: 'Tenant context required' });
+    }
     const modules = await moduleManagementService.getCompanyModules(tenantId);
     
     res.json({ success: true, modules });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+/**
+ * GET /api/company/enabled-module-codes
+ * Enabled subscription module codes for the current tenant (any authenticated tenant user).
+ * Used by the shell/nav so unsubscribed modules stay hidden for everyone.
+ */
+exports.getMyEnabledModuleCodes = async (req, res) => {
+  try {
+    const tenantId = req.user.tenantId?._id || req.user.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tenant context required',
+      });
+    }
+
+    const codes = await moduleManagementService.getEnabledModuleCodesForTenant(tenantId);
+    res.json({ success: true, data: { codes } });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

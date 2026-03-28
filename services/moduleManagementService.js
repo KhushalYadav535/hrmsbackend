@@ -53,6 +53,27 @@ class ModuleManagementService {
   }
 
   /**
+   * Enabled platform module codes for a tenant (CompanyModule rows with isEnabled true).
+   * Used for nav and access checks — single source for subscription state.
+   */
+  async getEnabledModuleCodesForTenant(tenantId) {
+    const tid = tenantId && (tenantId._id || tenantId);
+    if (!tid) return [];
+
+    const rows = await CompanyModule.find({ tenantId: tid, isEnabled: true })
+      .populate('moduleId', 'moduleCode moduleName')
+      .lean();
+
+    const codes = [];
+    for (const cm of rows) {
+      const mid = cm.moduleId;
+      const code = mid && typeof mid === 'object' && mid.moduleCode ? mid.moduleCode : null;
+      if (code) codes.push(String(code).trim());
+    }
+    return codes;
+  }
+
+  /**
    * Check if a module is enabled for a company (tenant)
    */
   async isModuleEnabled(tenantId, moduleCode) {

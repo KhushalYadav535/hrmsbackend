@@ -111,6 +111,16 @@ router.get(
 );
 
 /**
+ * GET /api/company/enabled-module-codes
+ * Any authenticated user in a tenant (Employee, Manager, etc.) — read-only codes for nav gating.
+ */
+router.get(
+  '/company/enabled-module-codes',
+  protect,
+  moduleManagementController.getMyEnabledModuleCodes
+);
+
+/**
  * GET /api/company/module-requests
  * Get module requests for current company (tenant)
  */
