@@ -86,6 +86,11 @@ const employeeSchema = new mongoose.Schema({
     ref: 'Employee',
     comment: 'Reporting manager (Employee reference)',
   },
+  secondLevelManager: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Employee',
+    comment: 'Second level manager (Employee reference)',
+  },
   // BRD Requirement: Organization unit posting
   postingUnitId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -128,6 +133,11 @@ const employeeSchema = new mongoose.Schema({
   salary: {
     type: Number,
     required: true,
+  },
+  salaryStructure: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'SalaryStructure',
+    comment: 'Assigned salary structure',
   },
   ctc: {
     type: Number,

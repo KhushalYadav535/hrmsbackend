@@ -40,6 +40,20 @@ const weeklyOffSchema = new mongoose.Schema({
     max: 6,
     comment: '0=Sunday, 1=Monday, ..., 6=Saturday',
   }],
+  alternateDays: [{
+    dayOfWeek: {
+      type: Number,
+      min: 0,
+      max: 6,
+      comment: '0=Sunday, 1=Monday, ..., 6=Saturday',
+    },
+    weekNumbers: [{
+      type: Number,
+      min: 1,
+      max: 5,
+      comment: 'e.g., 2 for 2nd occurrence, 4 for 4th occurrence in month',
+    }],
+  }],
   rotatingPattern: {
     daysPerWeek: {
       type: Number,

@@ -1,4 +1,5 @@
 const Location = require('../models/Location');
+const OrganizationUnit = require('../models/OrganizationUnit');
 
 // @desc    Get all locations for tenant
 // @route   GET /api/locations
@@ -29,20 +30,67 @@ exports.getLocations = async (req, res) => {
   }
 };
 
-// @desc    Get active locations for dropdown (only Active status)
+// @desc    Get active locations for dropdown (Location Master + active Org units from Branch/HO/ZO/RO Master)
 // @route   GET /api/locations/active
 // @access  Private
 exports.getActiveLocations = async (req, res) => {
   try {
+    const tenantId = req.tenantId;
+    if (!tenantId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tenant context required',
+      });
+    }
+
     const locations = await Location.find({
-      tenantId: req.tenantId,
-      status: 'Active',
-    }).sort({ state: 1, name: 1 }).select('name code state city');
+      tenantId,
+      $or: [{ status: 'Active' }, { status: 'active' }],
+    })
+      .sort({ state: 1, name: 1 })
+      .select('name code state city branchId')
+      .lean();
+
+    const fromMaster = locations.map((loc) => ({
+      ...loc,
+      source: 'Location',
+    }));
+
+    const orgUnits = await OrganizationUnit.find({
+      tenantId,
+      isActive: true,
+      unitType: { $in: ['HO', 'ZO', 'RO', 'BRANCH'] },
+    })
+      .sort({ unitName: 1 })
+      .select('unitName unitCode state city _id')
+      .lean();
+
+    const branchIdsLinked = new Set(
+      locations.map((l) => (l.branchId ? String(l.branchId) : null)).filter(Boolean)
+    );
+
+    const fromOrg = [];
+    for (const u of orgUnits) {
+      const idStr = u._id.toString();
+      if (branchIdsLinked.has(idStr)) continue;
+      fromOrg.push({
+        _id: u._id,
+        name: u.unitName,
+        code: u.unitCode,
+        state: u.state,
+        city: u.city,
+        source: 'OrganizationUnit',
+      });
+    }
+
+    const merged = [...fromMaster, ...fromOrg].sort((a, b) =>
+      String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+    );
 
     res.status(200).json({
       success: true,
-      count: locations.length,
-      data: locations,
+      count: merged.length,
+      data: merged,
     });
   } catch (error) {
     res.status(500).json({

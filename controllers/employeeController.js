@@ -160,7 +160,10 @@ exports.getEmployee = async (req, res) => {
     const employee = await Employee.findOne({
       _id: req.params.id,
       tenantId: req.tenantId,
-    }).populate('reportingManager', 'firstName lastName employeeCode');
+    })
+      .populate('reportingManager', 'firstName lastName employeeCode')
+      .populate('secondLevelManager', 'firstName lastName employeeCode')
+      .populate('salaryStructure', 'name status');
 
     if (!employee) {
       return res.status(404).json({

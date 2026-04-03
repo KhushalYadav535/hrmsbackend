@@ -629,6 +629,22 @@ exports.getMe = async (req, res) => {
     data.role = primaryRole(user);
     data.roles = normalizeRoles(user);
 
+    try {
+      const Employee = require('../models/Employee');
+      const employeeRecord = await Employee.findOne({ email: user.email, tenantId: user.tenantId });
+      if (employeeRecord) {
+        data.employeeId = employeeRecord._id;
+        const reporteesCount = await Employee.countDocuments({ reportingManager: employeeRecord._id, status: 'Active' });
+        // Also check secondLevelManager if it exists in the future
+        const secondLevelReporteesCount = await Employee.countDocuments({ secondLevelManager: employeeRecord._id, status: 'Active' });
+        if (reporteesCount > 0 || secondLevelReporteesCount > 0) {
+          data.isManager = true;
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching manager status:', err);
+    }
+
     res.status(200).json({
       success: true,
       data,
